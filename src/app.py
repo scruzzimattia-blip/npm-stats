@@ -172,11 +172,23 @@ def render_charts(df: pd.DataFrame) -> None:
     if df.empty:
         return
 
+    granularity_options = {"5 Minuten": "5min", "15 Minuten": "15min", "1 Stunde": "1h", "1 Tag": "1D"}
+
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.subheader("Requests pro Stunde")
-        time_df = df.set_index("time").resample("1h").size().rename("Requests")
+        gcol1, gcol2 = st.columns([3, 1])
+        with gcol1:
+            st.subheader("Requests über Zeit")
+        with gcol2:
+            selected_granularity = st.selectbox(
+                "Granularität",
+                options=list(granularity_options.keys()),
+                index=2,
+                label_visibility="collapsed",
+            )
+        bucket = granularity_options[selected_granularity]
+        time_df = df.set_index("time").resample(bucket).size().rename("Requests")
         st.area_chart(time_df, width="stretch")
 
     with col2:
