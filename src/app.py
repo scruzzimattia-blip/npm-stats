@@ -236,6 +236,32 @@ def render_charts(df: pd.DataFrame) -> None:
         st.dataframe(top_paths, width="stretch", hide_index=True)
 
 
+def render_top_ips(df: pd.DataFrame) -> None:
+    """Render top IP addresses analysis."""
+    if df.empty:
+        return
+
+    st.divider()
+    with st.expander("Top IPs", expanded=True):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.write("**Top 10 IPs nach Requests**")
+            top_ips = df["remote_addr"].value_counts().head(10).reset_index()
+            top_ips.columns = ["IP-Adresse", "Requests"]
+            st.dataframe(top_ips, width="stretch", hide_index=True)
+
+        with col2:
+            st.write("**Top 10 IPs nach Fehlern**")
+            error_df = df[df["status"] >= 400]
+            if not error_df.empty:
+                top_error_ips = error_df["remote_addr"].value_counts().head(10).reset_index()
+                top_error_ips.columns = ["IP-Adresse", "Fehler"]
+                st.dataframe(top_error_ips, width="stretch", hide_index=True)
+            else:
+                st.info("Keine Fehler im ausgewählten Zeitraum.")
+
+
 def render_bandwidth_analysis(df: pd.DataFrame) -> None:
     """Render bandwidth analysis."""
     if df.empty or "response_length" not in df.columns:
@@ -456,6 +482,7 @@ def main():
     render_metrics(df)
     st.divider()
     render_charts(df)
+    render_top_ips(df)
     render_bandwidth_analysis(df)
     render_geo_analysis(df)
     render_user_agent_analysis(df)
