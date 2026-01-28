@@ -362,14 +362,19 @@ def main():
     # Initialize GeoIP
     init_geoip()
 
-    # Header with sync button
+    # Header with sync button (10s cooldown)
     col1, col2 = st.columns([4, 1])
     with col1:
         st.title("🌐 NPM Traffic Monitor")
     with col2:
-        if st.button("🔄 Sync", width="stretch"):
+        last_sync = st.session_state.get("last_sync_time", 0)
+        cooldown_remaining = 10 - (time.time() - last_sync)
+        sync_disabled = cooldown_remaining > 0
+
+        if st.button("🔄 Sync", width="stretch", disabled=sync_disabled):
             with st.spinner("Synchronisiere..."):
                 new_rows = sync_logs()
+                st.session_state.last_sync_time = time.time()
                 st.toast(f"{new_rows} neue Einträge", icon="✅")
             st.rerun()
 
