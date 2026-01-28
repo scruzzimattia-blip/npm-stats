@@ -15,6 +15,7 @@ from .database import (
     get_distinct_hosts,
     get_traffic_stats,
     get_database_info,
+    get_newest_timestamp,
     health_check,
     load_traffic_df,
 )
@@ -34,9 +35,10 @@ logger = logging.getLogger(__name__)
 
 
 def sync_logs() -> int:
-    """Synchronize logs to database."""
+    """Synchronize logs to database, only importing new entries."""
     init_database()
-    rows = parse_all_logs()
+    since = get_newest_timestamp()
+    rows = parse_all_logs(since=since)
     inserted = insert_traffic_batch(rows)
     # Invalidate caches so new data is visible immediately
     load_traffic_data.clear()

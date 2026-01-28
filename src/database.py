@@ -151,6 +151,15 @@ def cleanup_old_data(days: Optional[int] = None) -> int:
             return deleted
 
 
+def get_newest_timestamp() -> Optional[datetime]:
+    """Get the newest record timestamp from the database."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT MAX(time) FROM traffic;")
+            result = cur.fetchone()
+            return result[0] if result else None
+
+
 def get_distinct_hosts() -> List[str]:
     """Get list of distinct hosts."""
     with get_connection() as conn:

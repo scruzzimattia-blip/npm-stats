@@ -196,9 +196,16 @@ def get_log_files() -> List[str]:
     return glob.glob(pattern)
 
 
-def parse_all_logs(limit_per_file: Optional[int] = None) -> List[Tuple]:
-    """Parse all log files and return data ready for database insertion."""
-    limit = limit_per_file or app_config.lines_per_file
+def parse_all_logs(limit_per_file: Optional[int] = None, since: Optional[datetime] = None) -> List[Tuple]:
+    """Parse all log files and return data ready for database insertion.
+
+    If since is provided, only entries newer than that timestamp are returned,
+    and fewer lines per file are read since only recent entries are needed.
+    """
+    if since and limit_per_file is None:
+        limit = 500
+    else:
+        limit = limit_per_file or app_config.lines_per_file
     rows = []
 
     log_files = get_log_files()
@@ -209,6 +216,8 @@ def parse_all_logs(limit_per_file: Optional[int] = None) -> List[Tuple]:
         for line in read_log_file(file_path, limit):
             parsed = parse_log_line(line)
             if parsed:
+                if since and parsed["time"] <= since:
+                    continue
                 rows.append((
                     parsed["time"],
                     parsed["host"],
