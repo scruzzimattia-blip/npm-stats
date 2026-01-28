@@ -107,6 +107,10 @@ def render_sidebar() -> tuple:
         help="Wähle die Domains aus, die angezeigt werden sollen"
     )
 
+    # Status code filter
+    status_options = ["Alle", "2xx Erfolg", "3xx Redirect", "4xx Client-Fehler", "5xx Server-Fehler"]
+    selected_status = st.sidebar.selectbox("Statuscodes", options=status_options, index=0)
+
     # Search filter
     search_query = st.sidebar.text_input(
         "Suche",
@@ -148,7 +152,7 @@ def render_sidebar() -> tuple:
         deleted = cleanup_old_data()
         st.sidebar.success(f"{deleted} alte Einträge gelöscht")
 
-    return selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query
+    return selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query, selected_status
 
 
 def render_metrics(df: pd.DataFrame) -> None:
@@ -399,7 +403,7 @@ def main():
                 st.toast(f"{new_rows} neue Einträge", icon="✅")
 
     # Sidebar filters
-    selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query = render_sidebar()
+    selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query, selected_status = render_sidebar()
 
     # Handle empty host selection
     if not selected_hosts:
@@ -414,6 +418,17 @@ def main():
             end_date=end_date,
             limit=app_config.max_display_rows,
         )
+
+    # Apply status code filter
+    status_ranges = {
+        "2xx Erfolg": (200, 299),
+        "3xx Redirect": (300, 399),
+        "4xx Client-Fehler": (400, 499),
+        "5xx Server-Fehler": (500, 599),
+    }
+    if selected_status != "Alle" and selected_status in status_ranges:
+        low, high = status_ranges[selected_status]
+        df = df[(df["status"] >= low) & (df["status"] <= high)]
 
     # Apply search filter
     if search_query:
