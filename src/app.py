@@ -148,6 +148,11 @@ def render_sidebar() -> tuple:
 
     # Maintenance
     st.sidebar.subheader("Wartung")
+    st.sidebar.caption(f"Aufbewahrung: {app_config.retention_days} Tage")
+    if db_info["oldest_record"]:
+        oldest = db_info["oldest_record"]
+        cleanup_date = oldest + timedelta(days=app_config.retention_days)
+        st.sidebar.caption(f"Nächste Bereinigung: {cleanup_date.strftime('%d.%m.%Y')}")
     if st.sidebar.button("Alte Daten bereinigen"):
         deleted = cleanup_old_data()
         st.sidebar.success(f"{deleted} alte Einträge gelöscht")
