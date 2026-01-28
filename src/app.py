@@ -349,6 +349,35 @@ def render_geo_analysis(df: pd.DataFrame) -> None:
             st.dataframe(city_counts, width="stretch", hide_index=True)
 
 
+def render_referer_analysis(df: pd.DataFrame) -> None:
+    """Render referer analysis."""
+    if df.empty or "referer" not in df.columns:
+        return
+
+    referer_df = df[df["referer"].notna() & (df["referer"] != "")]
+    if referer_df.empty:
+        return
+
+    st.divider()
+    with st.expander("Referer-Analyse", expanded=True):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.write("**Top 10 Referer**")
+            top_refs = referer_df["referer"].value_counts().head(10).reset_index()
+            top_refs.columns = ["Referer", "Requests"]
+            st.dataframe(top_refs, width="stretch", hide_index=True)
+
+        with col2:
+            st.write("**Referer-Domains**")
+            # Extract domain from referer URL
+            domains = referer_df["referer"].str.extract(r'https?://([^/]+)', expand=False).dropna()
+            if not domains.empty:
+                top_domains = domains.value_counts().head(10).reset_index()
+                top_domains.columns = ["Domain", "Requests"]
+                st.dataframe(top_domains, width="stretch", hide_index=True)
+
+
 def render_user_agent_analysis(df: pd.DataFrame) -> None:
     """Render user agent analysis."""
     if df.empty or "user_agent" not in df.columns:
@@ -513,6 +542,7 @@ def main():
     render_error_paths(df)
     render_bandwidth_analysis(df)
     render_geo_analysis(df)
+    render_referer_analysis(df)
     render_user_agent_analysis(df)
     render_request_log(df)
 
