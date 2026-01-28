@@ -295,21 +295,20 @@ def render_bandwidth_analysis(df: pd.DataFrame) -> None:
         return
 
     st.divider()
-    st.subheader("Bandbreiten-Analyse")
+    with st.expander("Bandbreiten-Analyse", expanded=True):
+        col1, col2 = st.columns(2)
 
-    col1, col2 = st.columns(2)
+        with col1:
+            st.write("**Datenvolumen pro Domain**")
+            bw_by_host = df.groupby("host")["response_length"].sum().sort_values(ascending=False).head(10).reset_index()
+            bw_by_host.columns = ["Domain", "Bytes"]
+            bw_by_host["Volumen"] = bw_by_host["Bytes"].apply(format_bytes)
+            st.dataframe(bw_by_host[["Domain", "Volumen"]], width="stretch", hide_index=True)
 
-    with col1:
-        st.write("**Datenvolumen pro Domain**")
-        bw_by_host = df.groupby("host")["response_length"].sum().sort_values(ascending=False).head(10).reset_index()
-        bw_by_host.columns = ["Domain", "Bytes"]
-        bw_by_host["Volumen"] = bw_by_host["Bytes"].apply(format_bytes)
-        st.dataframe(bw_by_host[["Domain", "Volumen"]], width="stretch", hide_index=True)
-
-    with col2:
-        st.write("**Datenvolumen pro Stunde**")
-        bw_time = df.set_index("time")["response_length"].resample("1h").sum().rename("Bytes")
-        st.area_chart(bw_time, width="stretch")
+        with col2:
+            st.write("**Datenvolumen pro Stunde**")
+            bw_time = df.set_index("time")["response_length"].resample("1h").sum().rename("Bytes")
+            st.area_chart(bw_time, width="stretch")
 
 
 def render_geo_analysis(df: pd.DataFrame) -> None:
@@ -331,22 +330,21 @@ def render_geo_analysis(df: pd.DataFrame) -> None:
         return
 
     st.divider()
-    st.subheader("Geografische Analyse")
+    with st.expander("Geografische Analyse", expanded=True):
+        col1, col2 = st.columns(2)
 
-    col1, col2 = st.columns(2)
+        with col1:
+            st.write("**Top 10 Länder**")
+            country_counts = df["country_code"].value_counts().head(10).reset_index()
+            country_counts.columns = ["Land", "Requests"]
+            st.dataframe(country_counts, width="stretch", hide_index=True)
 
-    with col1:
-        st.write("**Top 10 Länder**")
-        country_counts = df["country_code"].value_counts().head(10).reset_index()
-        country_counts.columns = ["Land", "Requests"]
-        st.dataframe(country_counts, width="stretch", hide_index=True)
-
-    with col2:
-        if "city" in df.columns and not df["city"].isna().all():
-            st.write("**Top 10 Städte**")
-            city_counts = df["city"].dropna().value_counts().head(10).reset_index()
-            city_counts.columns = ["Stadt", "Requests"]
-            st.dataframe(city_counts, width="stretch", hide_index=True)
+        with col2:
+            if "city" in df.columns and not df["city"].isna().all():
+                st.write("**Top 10 Städte**")
+                city_counts = df["city"].dropna().value_counts().head(10).reset_index()
+                city_counts.columns = ["Stadt", "Requests"]
+                st.dataframe(city_counts, width="stretch", hide_index=True)
 
 
 def render_referer_analysis(df: pd.DataFrame) -> None:
@@ -384,32 +382,31 @@ def render_user_agent_analysis(df: pd.DataFrame) -> None:
         return
 
     st.divider()
-    st.subheader("Browser & Geräte")
+    with st.expander("Browser & Geräte", expanded=True):
+        # Parse user agents (only unique values, then map back)
+        unique_uas = df["user_agent"].unique()
+        ua_map = {ua: parse_user_agent(ua) for ua in unique_uas}
+        ua_data = df["user_agent"].map(ua_map).apply(pd.Series)
 
-    # Parse user agents (only unique values, then map back)
-    unique_uas = df["user_agent"].unique()
-    ua_map = {ua: parse_user_agent(ua) for ua in unique_uas}
-    ua_data = df["user_agent"].map(ua_map).apply(pd.Series)
+        col1, col2, col3 = st.columns(3)
 
-    col1, col2, col3 = st.columns(3)
+        with col1:
+            st.write("**Browser**")
+            browser_counts = ua_data["browser"].value_counts().reset_index()
+            browser_counts.columns = ["Browser", "Requests"]
+            st.dataframe(browser_counts, width="stretch", hide_index=True)
 
-    with col1:
-        st.write("**Browser**")
-        browser_counts = ua_data["browser"].value_counts().reset_index()
-        browser_counts.columns = ["Browser", "Requests"]
-        st.dataframe(browser_counts, width="stretch", hide_index=True)
+        with col2:
+            st.write("**Betriebssystem**")
+            os_counts = ua_data["os"].value_counts().reset_index()
+            os_counts.columns = ["OS", "Requests"]
+            st.dataframe(os_counts, width="stretch", hide_index=True)
 
-    with col2:
-        st.write("**Betriebssystem**")
-        os_counts = ua_data["os"].value_counts().reset_index()
-        os_counts.columns = ["OS", "Requests"]
-        st.dataframe(os_counts, width="stretch", hide_index=True)
-
-    with col3:
-        st.write("**Gerätetyp**")
-        device_counts = ua_data["device"].value_counts().reset_index()
-        device_counts.columns = ["Gerät", "Requests"]
-        st.dataframe(device_counts, width="stretch", hide_index=True)
+        with col3:
+            st.write("**Gerätetyp**")
+            device_counts = ua_data["device"].value_counts().reset_index()
+            device_counts.columns = ["Gerät", "Requests"]
+            st.dataframe(device_counts, width="stretch", hide_index=True)
 
 
 def render_request_log(df: pd.DataFrame) -> None:
@@ -418,32 +415,31 @@ def render_request_log(df: pd.DataFrame) -> None:
         return
 
     st.divider()
-    st.subheader("Request Log")
+    with st.expander("Request Log", expanded=True):
+        # Export button
+        col1, col2 = st.columns([4, 1])
+        with col2:
+            csv = df_to_csv(df)
+            st.download_button(
+                label="CSV Export",
+                data=csv,
+                file_name=f"npm_traffic_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+            )
 
-    # Export button
-    col1, col2 = st.columns([4, 1])
-    with col2:
-        csv = df_to_csv(df)
-        st.download_button(
-            label="CSV Export",
-            data=csv,
-            file_name=f"npm_traffic_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv",
+        # Display table
+        display_cols = ["time", "host", "method", "path", "status", "remote_addr"]
+        if "country_code" in df.columns and not df["country_code"].isna().all():
+            display_cols.append("country_code")
+
+        st.dataframe(
+            df[display_cols].head(1000),
+            width="stretch",
+            hide_index=True,
         )
 
-    # Display table
-    display_cols = ["time", "host", "method", "path", "status", "remote_addr"]
-    if "country_code" in df.columns and not df["country_code"].isna().all():
-        display_cols.append("country_code")
-
-    st.dataframe(
-        df[display_cols].head(1000),
-        width="stretch",
-        hide_index=True,
-    )
-
-    if len(df) > 1000:
-        st.caption(f"Zeige 1000 von {format_number(len(df))} Einträgen")
+        if len(df) > 1000:
+            st.caption(f"Zeige 1000 von {format_number(len(df))} Einträgen")
 
 
 def main():
