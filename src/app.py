@@ -107,6 +107,13 @@ def render_sidebar() -> tuple:
         help="Wähle die Domains aus, die angezeigt werden sollen"
     )
 
+    # Search filter
+    search_query = st.sidebar.text_input(
+        "Suche",
+        placeholder="IP, Domain oder Pfad...",
+        help="Filtert Requests nach IP-Adresse, Domain oder Pfad"
+    )
+
     st.sidebar.divider()
 
     # Database info
@@ -141,7 +148,7 @@ def render_sidebar() -> tuple:
         deleted = cleanup_old_data()
         st.sidebar.success(f"{deleted} alte Einträge gelöscht")
 
-    return selected_hosts, start_date, end_date, auto_refresh, refresh_interval
+    return selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query
 
 
 def render_metrics(df: pd.DataFrame) -> None:
@@ -392,7 +399,7 @@ def main():
                 st.toast(f"{new_rows} neue Einträge", icon="✅")
 
     # Sidebar filters
-    selected_hosts, start_date, end_date, auto_refresh, refresh_interval = render_sidebar()
+    selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query = render_sidebar()
 
     # Handle empty host selection
     if not selected_hosts:
@@ -407,6 +414,15 @@ def main():
             end_date=end_date,
             limit=app_config.max_display_rows,
         )
+
+    # Apply search filter
+    if search_query:
+        mask = (
+            df["remote_addr"].str.contains(search_query, case=False, na=False)
+            | df["host"].str.contains(search_query, case=False, na=False)
+            | df["path"].str.contains(search_query, case=False, na=False)
+        )
+        df = df[mask]
 
     if df.empty:
         st.info("Keine Daten für den ausgewählten Filter gefunden.")
