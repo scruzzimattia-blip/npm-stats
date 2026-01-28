@@ -315,13 +315,10 @@ def main():
         st.error("Datenbankverbindung fehlgeschlagen!")
         return
 
-    # Auto-sync on first load
-    if "synced" not in st.session_state:
-        with st.spinner("Initiale Synchronisation..."):
-            new_rows = sync_logs()
-            st.session_state.synced = True
-            if new_rows > 0:
-                st.toast(f"{new_rows} neue Einträge", icon="✅")
+    # Initialize database schema on first load (without importing logs)
+    if "db_initialized" not in st.session_state:
+        init_database()
+        st.session_state.db_initialized = True
 
     # Sidebar filters
     selected_hosts, start_date, end_date = render_sidebar()
