@@ -382,9 +382,12 @@ def main():
     col1, col2 = st.columns([4, 1])
     with col1:
         st.title("🌐 NPM Traffic Monitor")
+        last_sync_ts = st.session_state.get("last_sync_time", 0)
+        if last_sync_ts > 0:
+            last_sync_dt = datetime.fromtimestamp(last_sync_ts)
+            st.caption(f"Letzter Sync: {last_sync_dt.strftime('%H:%M:%S')}")
     with col2:
-        last_sync = st.session_state.get("last_sync_time", 0)
-        cooldown_remaining = 10 - (time.time() - last_sync)
+        cooldown_remaining = 10 - (time.time() - last_sync_ts)
         sync_disabled = cooldown_remaining > 0
 
         if st.button("🔄 Sync", width="stretch", disabled=sync_disabled):
@@ -404,6 +407,7 @@ def main():
         with st.spinner("Initiale Synchronisation..."):
             new_rows = sync_logs()
             st.session_state.synced = True
+            st.session_state.last_sync_time = time.time()
             if new_rows > 0:
                 st.toast(f"{new_rows} neue Einträge", icon="✅")
 
