@@ -24,6 +24,7 @@ from .log_parser import parse_all_logs, init_geoip
 from .utils import (
     setup_logging,
     format_number,
+    format_bytes,
     calculate_error_rate,
     get_time_ranges,
     parse_user_agent,
@@ -148,7 +149,7 @@ def render_metrics(df: pd.DataFrame) -> None:
     if df.empty:
         return
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
 
     total = len(df)
     unique_ips = df["remote_addr"].nunique()
@@ -156,12 +157,14 @@ def render_metrics(df: pd.DataFrame) -> None:
     err_rate = calculate_error_rate(total, errors)
     distinct_hosts = df["host"].nunique()
     distinct_countries = df["country_code"].nunique() if "country_code" in df.columns else 0
+    total_bytes = df["response_length"].sum() if "response_length" in df.columns else 0
 
     col1.metric("Requests", format_number(total))
     col2.metric("Unique IPs", format_number(unique_ips))
     col3.metric("Fehlerrate", f"{err_rate:.1f}%")
     col4.metric("Domains", format_number(distinct_hosts))
     col5.metric("Länder", format_number(distinct_countries))
+    col6.metric("Bandbreite", format_bytes(total_bytes))
 
 
 def render_charts(df: pd.DataFrame) -> None:
@@ -203,6 +206,29 @@ def render_charts(df: pd.DataFrame) -> None:
         top_paths = df["path"].value_counts().head(10).reset_index()
         top_paths.columns = ["Pfad", "Requests"]
         st.dataframe(top_paths, width="stretch", hide_index=True)
+
+
+def render_bandwidth_analysis(df: pd.DataFrame) -> None:
+    """Render bandwidth analysis."""
+    if df.empty or "response_length" not in df.columns:
+        return
+
+    st.divider()
+    st.subheader("Bandbreiten-Analyse")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.write("**Datenvolumen pro Domain**")
+        bw_by_host = df.groupby("host")["response_length"].sum().sort_values(ascending=False).head(10).reset_index()
+        bw_by_host.columns = ["Domain", "Bytes"]
+        bw_by_host["Volumen"] = bw_by_host["Bytes"].apply(format_bytes)
+        st.dataframe(bw_by_host[["Domain", "Volumen"]], width="stretch", hide_index=True)
+
+    with col2:
+        st.write("**Datenvolumen pro Stunde**")
+        bw_time = df.set_index("time")["response_length"].resample("1h").sum().rename("Bytes")
+        st.area_chart(bw_time, width="stretch")
 
 
 def render_geo_analysis(df: pd.DataFrame) -> None:
@@ -364,6 +390,7 @@ def main():
     render_metrics(df)
     st.divider()
     render_charts(df)
+    render_bandwidth_analysis(df)
     render_geo_analysis(df)
     render_user_agent_analysis(df)
     render_request_log(df)
