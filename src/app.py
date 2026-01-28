@@ -38,22 +38,37 @@ def sync_logs() -> int:
     init_database()
     rows = parse_all_logs()
     inserted = insert_traffic_batch(rows)
+    # Invalidate caches so new data is visible immediately
+    load_traffic_data.clear()
+    _cached_hosts.clear()
+    _cached_db_info.clear()
     return inserted
 
 
+@st.cache_data(ttl=30)
 def load_traffic_data(
-    hosts: Optional[List[str]] = None,
+    hosts: Optional[tuple] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     limit: int = 50000,
 ) -> pd.DataFrame:
     """Load traffic data from database with filters."""
     return load_traffic_df(
-        hosts=hosts,
+        hosts=list(hosts) if hosts else None,
         start_date=start_date,
         end_date=end_date,
         limit=limit,
     )
+
+
+@st.cache_data(ttl=60)
+def _cached_hosts():
+    return get_distinct_hosts()
+
+
+@st.cache_data(ttl=60)
+def _cached_db_info():
+    return get_database_info()
 
 
 def render_sidebar() -> tuple:
@@ -80,7 +95,7 @@ def render_sidebar() -> tuple:
         end_date = datetime.combine(custom_end, datetime.max.time())
 
     # Host filter
-    hosts = get_distinct_hosts()
+    hosts = _cached_hosts()
     selected_hosts = st.sidebar.multiselect(
         "Domains",
         options=hosts,
@@ -92,7 +107,7 @@ def render_sidebar() -> tuple:
 
     # Database info
     st.sidebar.subheader("Datenbank")
-    db_info = get_database_info()
+    db_info = _cached_db_info()
     st.sidebar.metric("Einträge", format_number(db_info["total_rows"] or 0))
     st.sidebar.metric("Größe", db_info["table_size"] or "0 B")
 
@@ -210,8 +225,10 @@ def render_user_agent_analysis(df: pd.DataFrame) -> None:
     st.divider()
     st.subheader("Browser & Geräte")
 
-    # Parse user agents
-    ua_data = df["user_agent"].apply(parse_user_agent).apply(pd.Series)
+    # Parse user agents (only unique values, then map back)
+    unique_uas = df["user_agent"].unique()
+    ua_map = {ua: parse_user_agent(ua) for ua in unique_uas}
+    ua_data = df["user_agent"].map(ua_map).apply(pd.Series)
 
     col1, col2, col3 = st.columns(3)
 
@@ -317,7 +334,7 @@ def main():
     # Load data
     with st.spinner("Lade Daten..."):
         df = load_traffic_data(
-            hosts=selected_hosts,
+            hosts=tuple(selected_hosts),
             start_date=start_date,
             end_date=end_date,
             limit=app_config.max_display_rows,

@@ -6,6 +6,7 @@ import os
 import re
 import ipaddress
 from datetime import datetime
+from functools import lru_cache
 from typing import List, Tuple, Optional, Iterator, Dict, Any
 
 from .config import (
@@ -53,6 +54,7 @@ def init_geoip() -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def get_geoip_info(ip: str) -> Tuple[Optional[str], Optional[str]]:
     """Get country code and city for an IP address."""
     if _geoip_reader is None:
@@ -76,6 +78,7 @@ def is_ip_in_networks(ip_str: str, networks: List) -> bool:
         return False
 
 
+@lru_cache(maxsize=4096)
 def should_ignore_ip(ip_str: str) -> bool:
     """Check if an IP should be ignored based on filtering rules."""
     ip_str = ip_str.strip()

@@ -3,6 +3,7 @@
 import os
 import ipaddress
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Set, List
 
 
@@ -70,10 +71,11 @@ CLOUDFLARE_NETWORKS: List[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
 ]
 
 # Custom IPs to ignore (can be extended via environment)
-def get_ignored_ips() -> Set[str]:
+@lru_cache(maxsize=1)
+def get_ignored_ips() -> frozenset:
     """Get set of manually ignored IPs from environment."""
     env_ips = os.getenv("IGNORED_IPS", "")
-    ips = {ip.strip() for ip in env_ips.split(",") if ip.strip()}
+    ips = frozenset(ip.strip() for ip in env_ips.split(",") if ip.strip())
     return ips
 
 
