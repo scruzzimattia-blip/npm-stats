@@ -1,6 +1,7 @@
 """Main Streamlit application for NPM Monitor."""
 
 import logging
+import time
 from datetime import datetime, timedelta
 from typing import Optional, List
 
@@ -120,13 +121,26 @@ def render_sidebar() -> tuple:
 
     st.sidebar.divider()
 
+    # Auto-refresh
+    st.sidebar.subheader("Auto-Refresh")
+    auto_refresh = st.sidebar.toggle("Aktiviert", value=False)
+    refresh_interval = st.sidebar.selectbox(
+        "Intervall",
+        options=[30, 60, 120, 300],
+        format_func=lambda x: f"{x} Sekunden" if x < 60 else f"{x // 60} Minuten",
+        index=1,
+        disabled=not auto_refresh,
+    )
+
+    st.sidebar.divider()
+
     # Maintenance
     st.sidebar.subheader("Wartung")
     if st.sidebar.button("Alte Daten bereinigen"):
         deleted = cleanup_old_data()
         st.sidebar.success(f"{deleted} alte Einträge gelöscht")
 
-    return selected_hosts, start_date, end_date
+    return selected_hosts, start_date, end_date, auto_refresh, refresh_interval
 
 
 def render_metrics(df: pd.DataFrame) -> None:
@@ -326,7 +340,7 @@ def main():
                 st.toast(f"{new_rows} neue Einträge", icon="✅")
 
     # Sidebar filters
-    selected_hosts, start_date, end_date = render_sidebar()
+    selected_hosts, start_date, end_date, auto_refresh, refresh_interval = render_sidebar()
 
     # Handle empty host selection
     if not selected_hosts:
@@ -353,6 +367,12 @@ def main():
     render_geo_analysis(df)
     render_user_agent_analysis(df)
     render_request_log(df)
+
+    # Auto-refresh: sync new data and rerun
+    if auto_refresh:
+        time.sleep(refresh_interval)
+        sync_logs()
+        st.rerun()
 
 
 if __name__ == "__main__":
