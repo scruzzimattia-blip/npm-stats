@@ -1,0 +1,6 @@
+streamlit>=1.30.0
+pandas>=2.0.0
+psycopg2-binary>=2.9.9
+python-dateutil>=2.8.2
+geoip2>=4.8.0
+sqlalchemy>=2.0.0
