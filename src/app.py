@@ -262,6 +262,33 @@ def render_top_ips(df: pd.DataFrame) -> None:
                 st.info("Keine Fehler im ausgewählten Zeitraum.")
 
 
+def render_error_paths(df: pd.DataFrame) -> None:
+    """Render top error-producing paths."""
+    if df.empty:
+        return
+
+    error_df = df[df["status"] >= 400]
+    if error_df.empty:
+        return
+
+    st.divider()
+    with st.expander("Fehler-Analyse", expanded=True):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.write("**Top 10 Fehler-Pfade**")
+            error_paths = error_df.groupby(["host", "path", "status"]).size().reset_index(name="Anzahl")
+            error_paths = error_paths.sort_values("Anzahl", ascending=False).head(10)
+            error_paths.columns = ["Domain", "Pfad", "Status", "Anzahl"]
+            st.dataframe(error_paths, width="stretch", hide_index=True)
+
+        with col2:
+            st.write("**Fehler nach Statuscode**")
+            error_status = error_df["status"].value_counts().sort_index().reset_index()
+            error_status.columns = ["Statuscode", "Anzahl"]
+            st.dataframe(error_status, width="stretch", hide_index=True)
+
+
 def render_bandwidth_analysis(df: pd.DataFrame) -> None:
     """Render bandwidth analysis."""
     if df.empty or "response_length" not in df.columns:
@@ -483,6 +510,7 @@ def main():
     st.divider()
     render_charts(df)
     render_top_ips(df)
+    render_error_paths(df)
     render_bandwidth_analysis(df)
     render_geo_analysis(df)
     render_user_agent_analysis(df)
