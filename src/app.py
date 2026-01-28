@@ -245,11 +245,20 @@ def render_bandwidth_analysis(df: pd.DataFrame) -> None:
 
 def render_geo_analysis(df: pd.DataFrame) -> None:
     """Render geographic analysis if GeoIP data available."""
-    if df.empty or "country_code" not in df.columns:
+    if df.empty:
         return
 
-    # Check if we have any geo data
-    if df["country_code"].isna().all():
+    has_geo_data = "country_code" in df.columns and not df["country_code"].isna().all()
+
+    if not has_geo_data:
+        st.divider()
+        st.subheader("Geografische Analyse")
+        st.info(
+            "GeoIP ist nicht konfiguriert. Für Länder- und Städteerkennung: "
+            "1) Kostenlosen Account bei [MaxMind](https://www.maxmind.com/en/geolite2/signup) erstellen, "
+            "2) MAXMIND_ACCOUNT_ID und MAXMIND_LICENSE_KEY in der .env setzen, "
+            "3) Container neu starten und Sync ausführen."
+        )
         return
 
     st.divider()
