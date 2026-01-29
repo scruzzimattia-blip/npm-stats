@@ -83,7 +83,7 @@ def init_database() -> None:
             # Add new columns if they don't exist (migration for existing databases)
             new_columns = [
                 ("referer", "TEXT"),
-                ("response_length", "INTEGER"),
+                ("response_length", "BIGINT"),
                 ("country_code", "CHAR(2)"),
                 ("city", "TEXT"),
             ]
@@ -99,6 +99,18 @@ def init_database() -> None:
                             NULL;
                     END $$;
                 """)
+
+            # Migration: change response_length from INTEGER to BIGINT if needed
+            cur.execute("""
+                DO $$
+                BEGIN
+                    ALTER TABLE traffic ALTER COLUMN response_length TYPE BIGINT;
+                EXCEPTION
+                    WHEN others THEN
+                        -- Column is already BIGINT or doesn't exist, ignore
+                        NULL;
+                END $$;
+            """)
 
             # Create indexes for better query performance
             indexes = [
