@@ -1,20 +1,25 @@
 FROM python:3.12-slim
 
+LABEL org.opencontainers.image.title="NPM Log Monitor"
+LABEL org.opencontainers.image.description="Streamlit dashboard for analyzing Nginx Proxy Manager logs"
+LABEL org.opencontainers.image.vendor="mattia"
+
 WORKDIR /app
+
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY requirements.txt .
+COPY --chown=appuser:appuser requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application
-COPY src/ ./src/
-COPY run.py .
+COPY --chown=appuser:appuser src/ ./src/
+COPY --chown=appuser:appuser run.py .
 
-# Create non-root user for security
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8501
