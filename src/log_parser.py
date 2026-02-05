@@ -65,7 +65,8 @@ def get_geoip_info(ip: str) -> Tuple[Optional[str], Optional[str]]:
         country = response.country.iso_code
         city = response.city.name
         return country, city
-    except Exception:
+    except Exception as e:
+        logger.debug(f"GeoIP lookup failed for IP '{ip}': {e}")
         return None, None
 
 
@@ -102,6 +103,7 @@ def parse_log_line(line: str) -> Optional[Dict[str, Any]]:
     """Parse a single log line and return extracted data."""
     match = LOG_PATTERN.match(line)
     if not match:
+        logger.debug(f"Failed to parse log line: {line[:100]}...")
         return None
 
     data = match.groupdict()
@@ -114,13 +116,15 @@ def parse_log_line(line: str) -> Optional[Dict[str, Any]]:
     # Parse timestamp
     try:
         dt = datetime.strptime(data["time_local"], "%d/%b/%Y:%H:%M:%S %z")
-    except ValueError:
+    except ValueError as e:
+        logger.debug(f"Failed to parse timestamp '{data['time_local']}': {e}")
         return None
 
     # Parse status code
     try:
         status = int(data["status"])
-    except ValueError:
+    except ValueError as e:
+        logger.debug(f"Failed to parse status code '{data['status']}': {e}")
         return None
 
     # Parse response length

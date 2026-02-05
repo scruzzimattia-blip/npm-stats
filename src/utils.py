@@ -1,8 +1,10 @@
 """Utility functions for NPM Monitor."""
 
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
+
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -38,7 +40,7 @@ def calculate_error_rate(total: int, errors: int) -> float:
     return (errors / total) * 100
 
 
-def get_time_ranges() -> dict:
+def get_time_ranges() -> dict[str, tuple[Optional[datetime], Optional[datetime]]]:
     """Get predefined time range options."""
     now = datetime.now()
     return {
@@ -51,7 +53,7 @@ def get_time_ranges() -> dict:
     }
 
 
-def parse_user_agent(ua: str) -> dict:
+def parse_user_agent(ua: str) -> dict[str, str]:
     """Parse user agent string into components."""
     ua_lower = ua.lower() if ua else ""
 
@@ -114,6 +116,22 @@ def get_status_category(status: int) -> str:
 def df_to_csv(df: pd.DataFrame) -> str:
     """Convert DataFrame to CSV string."""
     return df.to_csv(index=False)
+
+
+def df_to_json(df: pd.DataFrame) -> str:
+    """Convert DataFrame to JSON string."""
+    return df.to_json(orient="records", date_format="iso", indent=2)
+
+
+def calculate_percentiles(series: pd.Series) -> dict[str, float]:
+    """Calculate p50, p95, p99 percentiles for a numeric series."""
+    if series.empty or series.isna().all():
+        return {"p50": 0.0, "p95": 0.0, "p99": 0.0}
+    return {
+        "p50": float(series.quantile(0.50)),
+        "p95": float(series.quantile(0.95)),
+        "p99": float(series.quantile(0.99)),
+    }
 
 
 def get_relative_time(dt: datetime) -> str:

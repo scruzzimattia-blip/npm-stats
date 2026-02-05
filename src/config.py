@@ -15,6 +15,8 @@ class DatabaseConfig:
     name: str = field(default_factory=lambda: os.getenv("DB_NAME", "npm_monitor"))
     user: str = field(default_factory=lambda: os.getenv("DB_USER", "npm_user"))
     password: str = field(default_factory=lambda: os.getenv("DB_PASSWORD", ""))
+    pool_min_conn: int = field(default_factory=lambda: int(os.getenv("DB_POOL_MIN", "1")))
+    pool_max_conn: int = field(default_factory=lambda: int(os.getenv("DB_POOL_MAX", "10")))
 
     @property
     def connection_string(self) -> str:

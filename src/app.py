@@ -26,10 +26,12 @@ from .utils import (
     format_number,
     format_bytes,
     calculate_error_rate,
+    calculate_percentiles,
     get_time_ranges,
     parse_user_agent,
     get_status_category,
     df_to_csv,
+    df_to_json,
     get_relative_time,
 )
 
@@ -310,6 +312,14 @@ def render_bandwidth_analysis(df: pd.DataFrame) -> None:
             bw_time = df.set_index("time")["response_length"].resample("1h").sum().rename("Bytes")
             st.area_chart(bw_time, width="stretch")
 
+        # Response length percentiles
+        st.write("**Response-Größen-Statistiken**")
+        percentiles = calculate_percentiles(df["response_length"])
+        pcol1, pcol2, pcol3 = st.columns(3)
+        pcol1.metric("p50 (Median)", format_bytes(int(percentiles["p50"])))
+        pcol2.metric("p95", format_bytes(int(percentiles["p95"])))
+        pcol3.metric("p99", format_bytes(int(percentiles["p99"])))
+
 
 def render_geo_analysis(df: pd.DataFrame) -> None:
     """Render geographic analysis if GeoIP data available."""
@@ -410,14 +420,30 @@ def render_user_agent_analysis(df: pd.DataFrame) -> None:
 
 
 def render_request_log(df: pd.DataFrame) -> None:
-    """Render recent requests with export option."""
+    """Render recent requests with pagination and export options."""
     if df.empty:
         return
 
     st.divider()
     with st.expander("Request Log", expanded=True):
-        # Export button
-        col1, col2 = st.columns([4, 1])
+        # Export buttons and pagination controls
+        col1, col2, col3 = st.columns([2, 1, 1])
+
+        # Pagination settings
+        page_size = 100
+        total_rows = len(df)
+        total_pages = max(1, (total_rows + page_size - 1) // page_size)
+
+        with col1:
+            current_page = st.number_input(
+                "Seite",
+                min_value=1,
+                max_value=total_pages,
+                value=1,
+                step=1,
+                help=f"Seite 1-{total_pages} ({format_number(total_rows)} Einträge)",
+            )
+
         with col2:
             csv = df_to_csv(df)
             st.download_button(
@@ -427,19 +453,30 @@ def render_request_log(df: pd.DataFrame) -> None:
                 mime="text/csv",
             )
 
-        # Display table
+        with col3:
+            json_data = df_to_json(df)
+            st.download_button(
+                label="JSON Export",
+                data=json_data,
+                file_name=f"npm_traffic_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+            )
+
+        # Display table with pagination
         display_cols = ["time", "host", "method", "path", "status", "remote_addr"]
         if "country_code" in df.columns and not df["country_code"].isna().all():
             display_cols.append("country_code")
 
+        start_idx = (current_page - 1) * page_size
+        end_idx = min(start_idx + page_size, total_rows)
+
         st.dataframe(
-            df[display_cols].head(1000),
+            df[display_cols].iloc[start_idx:end_idx],
             width="stretch",
             hide_index=True,
         )
 
-        if len(df) > 1000:
-            st.caption(f"Zeige 1000 von {format_number(len(df))} Einträgen")
+        st.caption(f"Zeige {start_idx + 1}-{end_idx} von {format_number(total_rows)} Einträgen")
 
 
 def main():

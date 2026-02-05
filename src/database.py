@@ -26,13 +26,16 @@ def get_pool() -> ThreadedConnectionPool:
     global _pool
     if _pool is None:
         _pool = ThreadedConnectionPool(
-            minconn=1,
-            maxconn=10,
+            minconn=db_config.pool_min_conn,
+            maxconn=db_config.pool_max_conn,
             host=db_config.host,
             port=db_config.port,
             dbname=db_config.name,
             user=db_config.user,
             password=db_config.password,
+        )
+        logger.info(
+            f"Connection pool created (min={db_config.pool_min_conn}, max={db_config.pool_max_conn})"
         )
     return _pool
 
