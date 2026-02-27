@@ -5,8 +5,8 @@ import logging
 import os
 import re
 import ipaddress
+import time
 from datetime import datetime
-from functools import lru_cache
 from typing import List, Tuple, Optional, Iterator, Dict, Any
 
 from .config import (
@@ -17,6 +17,43 @@ from .config import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class TTLCache:
+    """Simple TTL cache implementation."""
+    
+    def __init__(self, maxsize: int = 4096, ttl: int = 3600):
+        self._cache: Dict[Tuple, Tuple[Any, float]] = {}
+        self._maxsize = maxsize
+        self._ttl = ttl
+    
+    def __call__(self, func):
+        def wrapper(*args, **kwargs):
+            key = (args, tuple(sorted(kwargs.items())))
+            now = time.time()
+            
+            if key in self._cache:
+                value, timestamp = self._cache[key]
+                if now - timestamp < self._ttl:
+                    return value
+                else:
+                    del self._cache[key]
+            
+            value = func(*args, **kwargs)
+            
+            # Evict oldest if cache is full
+            if len(self._cache) >= self._maxsize:
+                oldest = min(self._cache.items(), key=lambda x: x[1][1])
+                del self._cache[oldest[0]]
+            
+            self._cache[key] = (value, now)
+            return value
+        return wrapper
+
+
+# TTL cache with 1 hour expiry and max 4096 entries
+geoip_cache = TTLCache(maxsize=4096, ttl=3600)
+ip_filter_cache = TTLCache(maxsize=4096, ttl=3600)
 
 # NPM access log pattern
 LOG_PATTERN = re.compile(
@@ -62,7 +99,7 @@ def init_geoip() -> bool:
     return False
 
 
-@lru_cache(maxsize=4096)
+@geoip_cache
 def get_geoip_info(ip: str) -> Tuple[Optional[str], Optional[str]]:
     """Get country code and city for an IP address."""
     if _geoip_reader is None:
@@ -87,7 +124,7 @@ def is_ip_in_networks(ip_str: str, networks: List) -> bool:
         return False
 
 
-@lru_cache(maxsize=4096)
+@ip_filter_cache
 def should_ignore_ip(ip_str: str) -> bool:
     """Check if an IP should be ignored based on filtering rules."""
     ip_str = ip_str.strip()
