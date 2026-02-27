@@ -11,13 +11,9 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.database import (
-    init_database,
-    insert_traffic_batch,
-    cleanup_old_data,
-    get_newest_timestamp,
-)
-from src.log_parser import parse_all_logs, init_geoip
+from src.database import cleanup_old_data
+from src.log_parser import init_geoip
+from src.sync import sync_logs
 from src.utils import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -31,15 +27,6 @@ def handle_signal(signum: int, frame) -> None:
     global shutdown_requested
     logger.info(f"Received signal {signum}, shutting down...")
     shutdown_requested = True
-
-
-def sync_logs() -> int:
-    """Synchronize logs to database, only importing new entries."""
-    init_database()
-    since = get_newest_timestamp()
-    rows = parse_all_logs(since=since)
-    inserted = insert_traffic_batch(rows)
-    return inserted
 
 
 def run_scheduler() -> None:

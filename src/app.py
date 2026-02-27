@@ -10,17 +10,15 @@ import streamlit as st
 
 from .config import app_config
 from .database import (
-    init_database,
-    insert_traffic_batch,
     cleanup_old_data,
     get_distinct_hosts,
     get_traffic_stats,
     get_database_info,
-    get_newest_timestamp,
     health_check,
     load_traffic_df,
 )
-from .log_parser import parse_all_logs, init_geoip
+from .log_parser import init_geoip
+from .sync import sync_logs as _sync_logs_core
 from .utils import (
     setup_logging,
     format_number,
@@ -39,11 +37,8 @@ logger = logging.getLogger(__name__)
 
 
 def sync_logs() -> int:
-    """Synchronize logs to database, only importing new entries."""
-    init_database()
-    since = get_newest_timestamp()
-    rows = parse_all_logs(since=since)
-    inserted = insert_traffic_batch(rows)
+    """Synchronize logs and invalidate cached data used by the UI."""
+    inserted = _sync_logs_core()
     # Invalidate caches so new data is visible immediately
     load_traffic_data.clear()
     _cached_hosts.clear()
