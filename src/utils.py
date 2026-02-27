@@ -140,6 +140,13 @@ def get_relative_time(dt: datetime) -> str:
         return "Nie"
 
     now = datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now()
+    
+    # Convert dt to same timezone as now for accurate comparison
+    if dt.tzinfo and not now.tzinfo:
+        now = now.replace(tzinfo=dt.tzinfo)
+    elif not dt.tzinfo and now.tzinfo:
+        dt = dt.replace(tzinfo=now.tzinfo)
+    
     diff = now - dt
 
     if diff.total_seconds() < 60:
