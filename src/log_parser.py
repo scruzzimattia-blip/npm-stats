@@ -27,6 +27,14 @@ LOG_PATTERN = re.compile(
     r'"(?P<user_agent>[^"]*)"\s+"(?P<referer>[^"]*)"'
 )
 
+# Fallback pattern for simpler log formats
+LOG_PATTERN_FALLBACK = re.compile(
+    r'(?P<time_local>\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2}\s+[+-]\d{4})\s+'
+    r'(?P<method>\w+)\s+(?P<path>[^\s]+)\s+'
+    r'(?P<status>\d{3})\s+(?P<length>\d+|-)\s+'
+    r'"(?P<user_agent>[^"]*)"\s+"(?P<referer>[^"]*)"'
+)
+
 # GeoIP reader (optional)
 _geoip_reader = None
 
@@ -102,12 +110,24 @@ def should_ignore_ip(ip_str: str) -> bool:
 def parse_log_line(line: str) -> Optional[Dict[str, Any]]:
     """Parse a single log line and return extracted data."""
     match = LOG_PATTERN.match(line)
+    
     if not match:
-        logger.debug(f"Failed to parse log line: {line[:100]}...")
-        return None
-
-    data = match.groupdict()
-    client_ip = data["client_ip"].strip()
+        # Try fallback pattern
+        match = LOG_PATTERN_FALLBACK.match(line)
+        if not match:
+            logger.debug(f"Failed to parse log line: {line[:100]}...")
+            return None
+        
+        data = match.groupdict()
+        client_ip = "-"
+        host = "-"
+        scheme = "http"
+        
+    else:
+        data = match.groupdict()
+        client_ip = data["client_ip"].strip()
+        host = data["host"]
+        scheme = data["scheme"]
 
     # Filter ignored IPs
     if should_ignore_ip(client_ip):
@@ -138,7 +158,7 @@ def parse_log_line(line: str) -> Optional[Dict[str, Any]]:
 
     return {
         "time": dt,
-        "host": data["host"],
+        "host": host,
         "method": data["method"],
         "path": data["path"],
         "status": status,
