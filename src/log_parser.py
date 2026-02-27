@@ -6,6 +6,7 @@ import os
 import re
 import ipaddress
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import List, Tuple, Optional, Iterator, Dict, Any
 
@@ -258,45 +259,74 @@ def get_log_files() -> List[str]:
     return glob.glob(pattern)
 
 
+def parse_single_log_file(file_path: str, limit: int, since: Optional[datetime]) -> List[Tuple]:
+    """Parse a single log file and return parsed rows."""
+    rows = []
+    file_rows = 0
+    
+    for line in read_log_file(file_path, limit):
+        parsed = parse_log_line(line)
+        if parsed:
+            if since and parsed["time"] <= since:
+                continue
+            rows.append((
+                parsed["time"],
+                parsed["host"],
+                parsed["method"],
+                parsed["path"],
+                parsed["status"],
+                parsed["remote_addr"],
+                parsed["user_agent"],
+                parsed["referer"],
+                parsed["response_length"],
+                parsed["country_code"],
+                parsed["city"],
+                parsed.get("scheme", "https"),
+            ))
+            file_rows += 1
+    
+    logger.debug(f"Parsed {file_rows} valid entries from {os.path.basename(file_path)}")
+    return rows
+
+
 def parse_all_logs(limit_per_file: Optional[int] = None, since: Optional[datetime] = None) -> List[Tuple]:
     """Parse all log files and return data ready for database insertion.
 
     If since is provided, only entries newer than that timestamp are returned,
     and fewer lines per file are read since only recent entries are needed.
+    
+    Uses parallel processing for better performance on multi-core systems.
     """
     if since and limit_per_file is None:
         limit = 500
     else:
         limit = limit_per_file or app_config.lines_per_file
-    rows = []
 
     log_files = get_log_files()
     logger.info(f"Found {len(log_files)} log files to process")
 
-    for file_path in log_files:
-        file_rows = 0
-        for line in read_log_file(file_path, limit):
-            parsed = parse_log_line(line)
-            if parsed:
-                if since and parsed["time"] <= since:
-                    continue
-                rows.append((
-                    parsed["time"],
-                    parsed["host"],
-                    parsed["method"],
-                    parsed["path"],
-                    parsed["status"],
-                    parsed["remote_addr"],
-                    parsed["user_agent"],
-                    parsed["referer"],
-                    parsed["response_length"],
-                    parsed["country_code"],
-                    parsed["city"],
-                    parsed.get("scheme", "https"),
-                ))
-                file_rows += 1
-
-        logger.debug(f"Parsed {file_rows} valid entries from {os.path.basename(file_path)}")
+    # Use parallel processing for better performance
+    max_workers = min(4, len(log_files)) if log_files else 1
+    rows = []
+    
+    if max_workers > 1:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(parse_single_log_file, fp, limit, since): fp 
+                for fp in log_files
+            }
+            for future in as_completed(futures):
+                try:
+                    file_rows = future.result()
+                    rows.extend(file_rows)
+                except Exception as e:
+                    file_path = futures[future]
+                    logger.error(f"Error parsing {file_path}: {e}")
+    else:
+        # Single file or no files - parse sequentially
+        for file_path in log_files:
+            file_rows = parse_single_log_file(file_path, limit, since)
+            rows.extend(file_rows)
 
     logger.info(f"Total parsed entries: {len(rows)}")
     return rows
