@@ -10,6 +10,7 @@ from psycopg2.extras import execute_batch, RealDictCursor
 from psycopg2.pool import ThreadedConnectionPool
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 import pandas as pd
 
 from .config import db_config, app_config
@@ -19,6 +20,22 @@ logger = logging.getLogger(__name__)
 # Connection pool (initialized lazily)
 _pool: Optional[ThreadedConnectionPool] = None
 _engine: Optional[Engine] = None
+_db_available: bool = False
+
+
+def is_database_available() -> bool:
+    """Check if database is reachable."""
+    global _db_available
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1;")
+        _db_available = True
+        return True
+    except Exception as e:
+        logger.warning(f"Database not available: {e}")
+        _db_available = False
+        return False
 
 
 def get_pool() -> ThreadedConnectionPool:
@@ -64,73 +81,78 @@ def get_connection() -> Generator[psycopg2.extensions.connection, None, None]:
         pool.putconn(conn)
 
 
-def init_database() -> None:
-    """Initialize database schema with optimized indexes."""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            # Main traffic table
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS traffic (
-                    id SERIAL PRIMARY KEY,
-                    time TIMESTAMPTZ NOT NULL,
-                    host TEXT NOT NULL,
-                    method TEXT NOT NULL,
-                    path TEXT NOT NULL,
-                    status INTEGER NOT NULL,
-                    remote_addr TEXT NOT NULL,
-                    user_agent TEXT,
-                    UNIQUE (time, host, remote_addr, path)
-                );
-            """)
+def init_database() -> bool:
+    """Initialize database schema with optimized indexes. Returns True if successful."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Main traffic table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS traffic (
+                        id SERIAL PRIMARY KEY,
+                        time TIMESTAMPTZ NOT NULL,
+                        host TEXT NOT NULL,
+                        method TEXT NOT NULL,
+                        path TEXT NOT NULL,
+                        status INTEGER NOT NULL,
+                        remote_addr TEXT NOT NULL,
+                        user_agent TEXT,
+                        UNIQUE (time, host, remote_addr, path)
+                    );
+                """)
 
-            # Add new columns if they don't exist (migration for existing databases)
-            new_columns = [
-                ("referer", "TEXT"),
-                ("response_length", "BIGINT"),
-                ("country_code", "CHAR(2)"),
-                ("city", "TEXT"),
-            ]
+                # Add new columns if they don't exist (migration for existing databases)
+                new_columns = [
+                    ("referer", "TEXT"),
+                    ("response_length", "BIGINT"),
+                    ("country_code", "CHAR(2)"),
+                    ("city", "TEXT"),
+                ]
 
-            for col_name, col_type in new_columns:
-                cur.execute(f"""
+                for col_name, col_type in new_columns:
+                    cur.execute(f"""
+                        DO $$
+                        BEGIN
+                            ALTER TABLE traffic ADD COLUMN {col_name} {col_type};
+                        EXCEPTION
+                            WHEN duplicate_column THEN
+                                -- Column already exists, ignore
+                                NULL;
+                        END $$;
+                    """)
+
+                # Migration: change response_length from INTEGER to BIGINT if needed
+                cur.execute("""
                     DO $$
                     BEGIN
-                        ALTER TABLE traffic ADD COLUMN {col_name} {col_type};
+                        ALTER TABLE traffic ALTER COLUMN response_length TYPE BIGINT;
                     EXCEPTION
-                        WHEN duplicate_column THEN
-                            -- Column already exists, ignore
+                        WHEN others THEN
+                            -- Column is already BIGINT or doesn't exist, ignore
                             NULL;
                     END $$;
                 """)
 
-            # Migration: change response_length from INTEGER to BIGINT if needed
-            cur.execute("""
-                DO $$
-                BEGIN
-                    ALTER TABLE traffic ALTER COLUMN response_length TYPE BIGINT;
-                EXCEPTION
-                    WHEN others THEN
-                        -- Column is already BIGINT or doesn't exist, ignore
-                        NULL;
-                END $$;
-            """)
+                # Create indexes for better query performance
+                indexes = [
+                    ("idx_traffic_time", "traffic (time DESC)"),
+                    ("idx_traffic_host", "traffic (host)"),
+                    ("idx_traffic_remote_addr", "traffic (remote_addr)"),
+                    ("idx_traffic_status", "traffic (status)"),
+                    ("idx_traffic_time_host", "traffic (time DESC, host)"),
+                    ("idx_traffic_country", "traffic (country_code)"),
+                ]
 
-            # Create indexes for better query performance
-            indexes = [
-                ("idx_traffic_time", "traffic (time DESC)"),
-                ("idx_traffic_host", "traffic (host)"),
-                ("idx_traffic_remote_addr", "traffic (remote_addr)"),
-                ("idx_traffic_status", "traffic (status)"),
-                ("idx_traffic_time_host", "traffic (time DESC, host)"),
-                ("idx_traffic_country", "traffic (country_code)"),
-            ]
+                for idx_name, idx_def in indexes:
+                    cur.execute(f"""
+                        CREATE INDEX IF NOT EXISTS {idx_name} ON {idx_def};
+                    """)
 
-            for idx_name, idx_def in indexes:
-                cur.execute(f"""
-                    CREATE INDEX IF NOT EXISTS {idx_name} ON {idx_def};
-                """)
-
-            logger.info("Database schema initialized successfully")
+                logger.info("Database schema initialized successfully")
+                return True
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        return False
 
 
 def insert_traffic_batch(rows: List[Tuple]) -> int:
