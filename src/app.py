@@ -16,6 +16,7 @@ from .database import (
     get_database_info,
     health_check,
     load_traffic_df,
+    get_newest_timestamp,
 )
 from .log_parser import init_geoip
 from .sync import sync_logs as _sync_logs_core
@@ -127,6 +128,28 @@ def render_sidebar() -> tuple:
         st.sidebar.caption(f"Ältester: {get_relative_time(db_info['oldest_record'])}")
     if db_info["newest_record"]:
         st.sidebar.caption(f"Neuester: {get_relative_time(db_info['newest_record'])}")
+
+    st.sidebar.divider()
+
+    # Sync status
+    st.sidebar.subheader("Sync-Status")
+    newest = get_newest_timestamp()
+    if newest:
+        st.sidebar.caption(f"Letzte Daten: {get_relative_time(newest)}")
+        time_since_sync = datetime.now(newest.tzinfo) - newest
+        if time_since_sync.total_seconds() < 300:
+            st.sidebar.success("● Aktuell")
+        elif time_since_sync.total_seconds() < 3600:
+            st.sidebar.info("● Vor few Minuten")
+        else:
+            st.sidebar.warning("● Veraltet")
+    else:
+        st.sidebar.caption("Keine Daten vorhanden")
+
+    if st.sidebar.button("Jetzt synchronisieren"):
+        with st.sidebar.status("Synchronisiere..."):
+            inserted = sync_logs()
+        st.sidebar.success(f"{inserted} neue Einträge")
 
     st.sidebar.divider()
 
