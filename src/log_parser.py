@@ -205,6 +205,7 @@ def parse_log_line(line: str) -> Optional[Dict[str, Any]]:
         "response_length": length,
         "country_code": country,
         "city": city,
+        "scheme": scheme,
     }
 
 
@@ -291,6 +292,7 @@ def parse_all_logs(limit_per_file: Optional[int] = None, since: Optional[datetim
                     parsed["response_length"],
                     parsed["country_code"],
                     parsed["city"],
+                    parsed.get("scheme", "https"),
                 ))
                 file_rows += 1
 

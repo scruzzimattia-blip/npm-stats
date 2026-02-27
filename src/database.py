@@ -107,6 +107,7 @@ def init_database() -> bool:
                     ("response_length", "BIGINT"),
                     ("country_code", "CHAR(2)"),
                     ("city", "TEXT"),
+                    ("scheme", "TEXT"),
                 ]
 
                 for col_name, col_type in new_columns:
@@ -164,8 +165,8 @@ def insert_traffic_batch(rows: List[Tuple]) -> int:
         with conn.cursor() as cur:
             query = """
                 INSERT INTO traffic (time, host, method, path, status, remote_addr,
-                                     user_agent, referer, response_length, country_code, city)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                     user_agent, referer, response_length, country_code, city, scheme)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (time, host, remote_addr, path) DO NOTHING;
             """
             execute_batch(cur, query, rows, page_size=1000)

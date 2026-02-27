@@ -389,9 +389,9 @@ def render_user_agent_analysis(df: pd.DataFrame) -> None:
     st.divider()
     with st.expander("Browser & Geräte", expanded=True):
         # Parse user agents (only unique values, then map back)
-        unique_uas = df["user_agent"].unique()
+        unique_uas = df["user_agent"].dropna().unique()
         ua_map = {ua: parse_user_agent(ua) for ua in unique_uas}
-        ua_data = df["user_agent"].map(ua_map).apply(pd.Series)
+        ua_data = df["user_agent"].dropna().map(ua_map).apply(pd.Series)
 
         col1, col2, col3 = st.columns(3)
 
@@ -412,6 +412,24 @@ def render_user_agent_analysis(df: pd.DataFrame) -> None:
             device_counts = ua_data["device"].value_counts().reset_index()
             device_counts.columns = ["Gerät", "Requests"]
             st.dataframe(device_counts, width="stretch", hide_index=True)
+
+        # Bot analysis
+        if "is_bot" in ua_data.columns:
+            bot_df = ua_data[ua_data["is_bot"] == True]
+            if not bot_df.empty:
+                st.write("**Bot-Traffic**")
+                bot_count = len(bot_df)
+                total_count = len(df)
+                bot_percentage = (bot_count / total_count) * 100
+                col1, col2 = st.columns(2)
+                col1.metric("Bot-Requests", format_number(bot_count))
+                col2.metric("Anteil", f"{bot_percentage:.1f}%")
+                
+                # Top bots
+                st.write("**Top Bots**")
+                bot_uas = df.loc[bot_df.index, "user_agent"].value_counts().head(10).reset_index()
+                bot_uas.columns = ["User-Agent", "Requests"]
+                st.dataframe(bot_uas, width="stretch", hide_index=True)
 
 
 def render_request_log(df: pd.DataFrame) -> None:

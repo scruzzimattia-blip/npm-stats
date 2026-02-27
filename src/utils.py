@@ -92,10 +92,19 @@ def parse_user_agent(ua: str) -> dict[str, str]:
     elif "bot" in ua_lower or "crawler" in ua_lower or "spider" in ua_lower:
         device = "Bot"
 
+    # Detect bot/crawler
+    is_bot = device == "Bot" or any(x in ua_lower for x in [
+        "bot", "crawler", "spider", "scraper", "curl", "wget", 
+        "python", "go-http", "java/", "node", "fetch", "preview",
+        "bingpreview", "googlebot", "duckduckbot", "yandex", "baiduspider",
+        "facebookexternalhit", "twitterbot", "slackbot", "telegrambot"
+    ])
+
     return {
         "browser": browser,
         "os": os_name,
         "device": device,
+        "is_bot": is_bot,
     }
 
 
