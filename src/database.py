@@ -287,6 +287,7 @@ def load_traffic_df(
 
     if hosts:
         # Use IN clause with tuple for SQLAlchemy
+        # Parameters are safely escaped via SQLAlchemy parameter binding
         placeholders = ", ".join([f":host_{i}" for i in range(len(hosts))])
         conditions.append(f"host IN ({placeholders})")
         for i, host in enumerate(hosts):
