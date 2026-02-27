@@ -22,6 +22,9 @@ _pool: Optional[ThreadedConnectionPool] = None
 _engine: Optional[Engine] = None
 _db_available: bool = False
 
+# Query timeout in seconds
+QUERY_TIMEOUT = 30
+
 
 def is_database_available() -> bool:
     """Check if database is reachable."""
@@ -71,6 +74,7 @@ def get_connection() -> Generator[psycopg2.extensions.connection, None, None]:
     pool = get_pool()
     conn = pool.getconn()
     try:
+        conn.timeout = QUERY_TIMEOUT
         yield conn
         conn.commit()
     except Exception as e:
