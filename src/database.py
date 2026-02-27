@@ -74,7 +74,8 @@ def get_connection() -> Generator[psycopg2.extensions.connection, None, None]:
     pool = get_pool()
     conn = pool.getconn()
     try:
-        conn.timeout = QUERY_TIMEOUT
+        with conn.cursor() as cur:
+            cur.execute("SET statement_timeout = %s", (QUERY_TIMEOUT * 1000,))
         yield conn
         conn.commit()
     except Exception as e:
