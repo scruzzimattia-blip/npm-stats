@@ -1,3 +1,13 @@
+FROM python:3.12-slim AS builder
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+WORKDIR /app
+
+# Install project dependencies
+COPY pyproject.toml .
+# We don't have uv.lock yet in the repo unless we run uv lock locally, but the lockfile will be created/used by uv sync
+RUN uv sync --frozen --no-dev --no-install-project || uv sync --no-dev --no-install-project
+
 FROM python:3.12-slim
 
 LABEL org.opencontainers.image.title="NPM Log Monitor"
@@ -12,9 +22,11 @@ RUN useradd -m -u 1000 appuser
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY --chown=appuser:appuser requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy virtual environment from builder
+COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
+
+# Ensure python uses the virtualenv
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy application
 COPY --chown=appuser:appuser src/ ./src/

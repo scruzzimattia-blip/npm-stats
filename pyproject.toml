@@ -1,0 +1,38 @@
+[project]
+name = "npm-monitor"
+version = "0.1.0"
+description = "Traffic-Monitoring-Dashboard für Nginx Proxy Manager (NPM)."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "geoip2>=4.8.0",
+    "pandas>=2.0.0",
+    "psycopg[binary]>=3.2.4",
+    "python-dateutil>=2.8.2",
+    "sqlalchemy>=2.0.0",
+    "streamlit>=1.30.0",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.1.0",
+    "pytest>=8.3.4",
+    "ruff>=0.9.9",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "C",  # flake8-comprehensions
+    "B",  # flake8-bugbear
+]
+ignore = [
+    "E501",  # line too long, handled by black/ruff format
+]
