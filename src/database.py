@@ -9,7 +9,7 @@ import pandas as pd
 import psycopg
 from psycopg import Connection
 from psycopg import rows as psycopg_rows
-from psycopg.pool import ThreadedConnectionPool
+from psycopg_pool import ConnectionPool
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
@@ -18,7 +18,7 @@ from .config import app_config, db_config
 logger = logging.getLogger(__name__)
 
 # Connection pool (initialized lazily)
-_pool: Optional[ThreadedConnectionPool] = None
+_pool: Optional[ConnectionPool] = None
 _engine: Optional[Engine] = None
 _db_available: bool = False
 
@@ -41,18 +41,15 @@ def is_database_available() -> bool:
         return False
 
 
-def get_pool() -> ThreadedConnectionPool:
+def get_pool() -> ConnectionPool:
     """Get or create the connection pool."""
     global _pool
     if _pool is None:
-        _pool = ThreadedConnectionPool(
-            minconn=db_config.pool_min_conn,
-            maxconn=db_config.pool_max_conn,
-            host=db_config.host,
-            port=db_config.port,
-            dbname=db_config.name,
-            user=db_config.user,
-            password=db_config.password,
+        _pool = ConnectionPool(
+            conninfo=db_config.connection_string,
+            min_size=db_config.pool_min_conn,
+            max_size=db_config.pool_max_conn,
+            open=True,
         )
         logger.info(f"Connection pool created (min={db_config.pool_min_conn}, max={db_config.pool_max_conn})")
     return _pool
@@ -70,18 +67,16 @@ def get_engine() -> Engine:
 def get_connection() -> Generator[Connection, None, None]:
     """Context manager for database connections from the pool."""
     pool = get_pool()
-    conn = pool.getconn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SET statement_timeout = %s", (QUERY_TIMEOUT * 1000,))
-        yield conn
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Database error: {e}")
-        raise
-    finally:
-        pool.putconn(conn)
+    with pool.connection() as conn:
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SET statement_timeout = %s", (QUERY_TIMEOUT * 1000,))
+            yield conn
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Database error: {e}")
+            raise
 
 
 def init_database() -> bool:
