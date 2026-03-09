@@ -53,9 +53,7 @@ def get_pool() -> ThreadedConnectionPool:
             user=db_config.user,
             password=db_config.password,
         )
-        logger.info(
-            f"Connection pool created (min={db_config.pool_min_conn}, max={db_config.pool_max_conn})"
-        )
+        logger.info(f"Connection pool created (min={db_config.pool_min_conn}, max={db_config.pool_max_conn})")
     return _pool
 
 
@@ -184,10 +182,7 @@ def cleanup_old_data(days: Optional[int] = None) -> int:
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM traffic WHERE time < %s",
-                (cutoff_date,)
-            )
+            cur.execute("DELETE FROM traffic WHERE time < %s", (cutoff_date,))
             deleted = cur.rowcount
             logger.info(f"Cleaned up {deleted} rows older than {retention_days} days")
             return deleted
@@ -233,7 +228,8 @@ def get_traffic_stats(
 
     with get_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(f"""
+            cur.execute(
+                f"""
                 SELECT
                     COUNT(*) as total_requests,
                     COUNT(DISTINCT remote_addr) as unique_ips,
@@ -244,7 +240,9 @@ def get_traffic_stats(
                     MAX(time) as last_request
                 FROM traffic
                 {where_clause};
-            """, params or None)
+            """,
+                params or None,
+            )
             return dict(cur.fetchone())
 
 

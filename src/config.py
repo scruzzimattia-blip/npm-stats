@@ -10,6 +10,7 @@ from typing import List
 @dataclass
 class DatabaseConfig:
     """Database connection configuration."""
+
     host: str = field(default_factory=lambda: os.getenv("DB_HOST", "npm-monitor-db"))
     port: int = field(default_factory=lambda: int(os.getenv("DB_PORT", "5432")))
     name: str = field(default_factory=lambda: os.getenv("DB_NAME", "npm_monitor"))
@@ -26,6 +27,7 @@ class DatabaseConfig:
 @dataclass
 class AppConfig:
     """Application configuration."""
+
     log_dir: str = field(default_factory=lambda: os.getenv("LOG_DIR", "/logs"))
     lines_per_file: int = field(default_factory=lambda: int(os.getenv("LINES_PER_FILE", "10000")))
     max_display_rows: int = field(default_factory=lambda: int(os.getenv("MAX_DISPLAY_ROWS", "50000")))
@@ -71,6 +73,7 @@ CLOUDFLARE_NETWORKS: List[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
     ipaddress.ip_network("2a06:98c0::/29"),
     ipaddress.ip_network("2c0f:f248::/32"),
 ]
+
 
 # Custom IPs to ignore (can be extended via environment)
 @lru_cache(maxsize=1)

@@ -2,12 +2,24 @@
 
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
 import pandas as pd
 import streamlit as st
 
+from .components import (
+    render_bandwidth_analysis,
+    render_charts,
+    render_error_paths,
+    render_geo_analysis,
+    render_metrics,
+    render_referer_analysis,
+    render_request_log,
+    render_sidebar,
+    render_top_ips,
+    render_user_agent_analysis,
+)
 from .config import app_config
 from .database import (
     cleanup_old_data,
@@ -19,19 +31,7 @@ from .database import (
 )
 from .log_parser import init_geoip
 from .sync import sync_logs as _sync_logs_core
-from .utils import (
-    calculate_error_rate,
-    calculate_percentiles,
-    df_to_csv,
-    df_to_json,
-    format_bytes,
-    format_number,
-    get_relative_time,
-    get_status_category,
-    get_time_ranges,
-    parse_user_agent,
-    setup_logging,
-)
+from .utils import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -72,446 +72,8 @@ def _cached_db_info():
     return get_database_info()
 
 
-def render_sidebar() -> tuple:
-    """Render sidebar with filters and return selected values."""
-    st.sidebar.header("Filter")
-
-    # Time range selection
-    time_ranges = get_time_ranges()
-    selected_range = st.sidebar.selectbox(
-        "Zeitraum",
-        options=list(time_ranges.keys()),
-        index=2,  # Default: Letzte 24 Stunden
-    )
-    start_date, end_date = time_ranges[selected_range]
-
-    # Custom date range
-    if st.sidebar.checkbox("Eigenen Zeitraum wählen"):
-        col1, col2 = st.sidebar.columns(2)
-        with col1:
-            custom_start = st.date_input("Von", value=datetime.now().date() - timedelta(days=7))
-        with col2:
-            custom_end = st.date_input("Bis", value=datetime.now().date())
-        start_date = datetime.combine(custom_start, datetime.min.time())
-        end_date = datetime.combine(custom_end, datetime.max.time())
-
-    # Host filter
-    hosts = _cached_hosts()
-    selected_hosts = st.sidebar.multiselect(
-        "Domains",
-        options=hosts,
-        default=hosts,
-        help="Wähle die Domains aus, die angezeigt werden sollen"
-    )
-
-    # Status code filter
-    status_options = ["Alle", "2xx Erfolg", "3xx Redirect", "4xx Client-Fehler", "5xx Server-Fehler"]
-    selected_status = st.sidebar.selectbox("Statuscodes", options=status_options, index=0)
-
-    # Search filter
-    search_query = st.sidebar.text_input(
-        "Suche",
-        placeholder="IP, Domain oder Pfad...",
-        help="Filtert Requests nach IP-Adresse, Domain oder Pfad"
-    )
-
-    st.sidebar.divider()
-
-    # Database info
-    st.sidebar.subheader("Datenbank")
-    db_info = _cached_db_info()
-    st.sidebar.metric("Einträge", format_number(db_info["total_rows"] or 0))
-    st.sidebar.metric("Größe", db_info["table_size"] or "0 B")
-
-    if db_info["oldest_record"]:
-        st.sidebar.caption(f"Ältester: {get_relative_time(db_info['oldest_record'])}")
-    if db_info["newest_record"]:
-        st.sidebar.caption(f"Neuester: {get_relative_time(db_info['newest_record'])}")
-
-    st.sidebar.divider()
-
-    # Sync status
-    st.sidebar.subheader("Sync-Status")
-    newest = get_newest_timestamp()
-    if newest:
-        st.sidebar.caption(f"Letzte Daten: {get_relative_time(newest)}")
-        time_since_sync = datetime.now(newest.tzinfo) - newest
-        if time_since_sync.total_seconds() < 300:
-            st.sidebar.success("● Aktuell")
-        elif time_since_sync.total_seconds() < 3600:
-            st.sidebar.info("● Vor few Minuten")
-        else:
-            st.sidebar.warning("● Veraltet")
-    else:
-        st.sidebar.caption("Keine Daten vorhanden")
-
-    if st.sidebar.button("Jetzt synchronisieren"):
-        with st.sidebar.status("Synchronisiere..."):
-            inserted = sync_logs()
-        st.sidebar.success(f"{inserted} neue Einträge")
-
-    st.sidebar.divider()
-
-    # Auto-refresh
-    st.sidebar.subheader("Auto-Refresh")
-    auto_refresh = st.sidebar.toggle("Aktiviert", value=False)
-    refresh_interval = st.sidebar.selectbox(
-        "Intervall",
-        options=[30, 60, 120, 300],
-        format_func=lambda x: f"{x} Sekunden" if x < 60 else f"{x // 60} Minuten",
-        index=1,
-        disabled=not auto_refresh,
-    )
-
-    st.sidebar.divider()
-
-    # Maintenance
-    st.sidebar.subheader("Wartung")
-    st.sidebar.caption(f"Aufbewahrung: {app_config.retention_days} Tage")
-    if db_info["oldest_record"]:
-        oldest = db_info["oldest_record"]
-        cleanup_date = oldest + timedelta(days=app_config.retention_days)
-        st.sidebar.caption(f"Nächste Bereinigung: {cleanup_date.strftime('%d.%m.%Y')}")
-    if st.sidebar.button("Alte Daten bereinigen"):
-        deleted = cleanup_old_data()
-        st.sidebar.success(f"{deleted} alte Einträge gelöscht")
-
-    return selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query, selected_status
-
-
-def render_metrics(df: pd.DataFrame) -> None:
-    """Render key metrics."""
-    if df.empty:
-        return
-
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
-
-    total = len(df)
-    unique_ips = df["remote_addr"].nunique()
-    errors = len(df[df["status"] >= 400])
-    err_rate = calculate_error_rate(total, errors)
-    distinct_hosts = df["host"].nunique()
-    distinct_countries = df["country_code"].nunique() if "country_code" in df.columns else 0
-    total_bytes = df["response_length"].sum() if "response_length" in df.columns else 0
-
-    col1.metric("Requests", format_number(total))
-    col2.metric("Unique IPs", format_number(unique_ips))
-    col3.metric("Fehlerrate", f"{err_rate:.1f}%")
-    col4.metric("Domains", format_number(distinct_hosts))
-    col5.metric("Länder", format_number(distinct_countries))
-    col6.metric("Bandbreite", format_bytes(total_bytes))
-
-
-def render_charts(df: pd.DataFrame) -> None:
-    """Render traffic charts."""
-    if df.empty:
-        return
-
-    granularity_options = {"5 Minuten": "5min", "15 Minuten": "15min", "1 Stunde": "1h", "1 Tag": "1D"}
-
-    col1, col2 = st.columns([2, 1])
-
-    with col1:
-        gcol1, gcol2 = st.columns([3, 1])
-        with gcol1:
-            st.subheader("Requests über Zeit")
-        with gcol2:
-            selected_granularity = st.selectbox(
-                "Granularität",
-                options=list(granularity_options.keys()),
-                index=2,
-                label_visibility="collapsed",
-            )
-        bucket = granularity_options[selected_granularity]
-        time_df = df.set_index("time").resample(bucket).size().rename("Requests")
-        st.area_chart(time_df, width="stretch")
-
-    with col2:
-        st.subheader("Statuscodes")
-        status_counts = df["status"].value_counts().sort_index()
-        st.bar_chart(status_counts)
-
-    st.divider()
-
-    # Status categories
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.subheader("Status-Kategorien")
-        df["status_category"] = df["status"].apply(get_status_category)
-        cat_counts = df["status_category"].value_counts()
-        st.bar_chart(cat_counts)
-
-    with col2:
-        st.subheader("Top 10 Domains")
-        top_hosts = df["host"].value_counts().head(10).reset_index()
-        top_hosts.columns = ["Domain", "Requests"]
-        st.dataframe(top_hosts, width="stretch", hide_index=True)
-
-    with col3:
-        st.subheader("Top 10 Pfade")
-        top_paths = df["path"].value_counts().head(10).reset_index()
-        top_paths.columns = ["Pfad", "Requests"]
-        st.dataframe(top_paths, width="stretch", hide_index=True)
-
-
-def render_top_ips(df: pd.DataFrame) -> None:
-    """Render top IP addresses analysis."""
-    if df.empty:
-        return
-
-    st.divider()
-    with st.expander("Top IPs", expanded=True):
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.write("**Top 10 IPs nach Requests**")
-            top_ips = df["remote_addr"].value_counts().head(10).reset_index()
-            top_ips.columns = ["IP-Adresse", "Requests"]
-            st.dataframe(top_ips, width="stretch", hide_index=True)
-
-        with col2:
-            st.write("**Top 10 IPs nach Fehlern**")
-            error_df = df[df["status"] >= 400]
-            if not error_df.empty:
-                top_error_ips = error_df["remote_addr"].value_counts().head(10).reset_index()
-                top_error_ips.columns = ["IP-Adresse", "Fehler"]
-                st.dataframe(top_error_ips, width="stretch", hide_index=True)
-            else:
-                st.info("Keine Fehler im ausgewählten Zeitraum.")
-
-
-def render_error_paths(df: pd.DataFrame) -> None:
-    """Render top error-producing paths."""
-    if df.empty:
-        return
-
-    error_df = df[df["status"] >= 400]
-    if error_df.empty:
-        return
-
-    st.divider()
-    with st.expander("Fehler-Analyse", expanded=True):
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.write("**Top 10 Fehler-Pfade**")
-            error_paths = error_df.groupby(["host", "path", "status"]).size().reset_index(name="Anzahl")
-            error_paths = error_paths.sort_values("Anzahl", ascending=False).head(10)
-            error_paths.columns = ["Domain", "Pfad", "Status", "Anzahl"]
-            st.dataframe(error_paths, width="stretch", hide_index=True)
-
-        with col2:
-            st.write("**Fehler nach Statuscode**")
-            error_status = error_df["status"].value_counts().sort_index().reset_index()
-            error_status.columns = ["Statuscode", "Anzahl"]
-            st.dataframe(error_status, width="stretch", hide_index=True)
-
-
-def render_bandwidth_analysis(df: pd.DataFrame) -> None:
-    """Render bandwidth analysis."""
-    if df.empty or "response_length" not in df.columns:
-        return
-
-    st.divider()
-    with st.expander("Bandbreiten-Analyse", expanded=True):
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.write("**Datenvolumen pro Domain**")
-            bw_by_host = df.groupby("host")["response_length"].sum().sort_values(ascending=False).head(10).reset_index()
-            bw_by_host.columns = ["Domain", "Bytes"]
-            bw_by_host["Volumen"] = bw_by_host["Bytes"].apply(format_bytes)
-            st.dataframe(bw_by_host[["Domain", "Volumen"]], width="stretch", hide_index=True)
-
-        with col2:
-            st.write("**Datenvolumen pro Stunde**")
-            bw_time = df.set_index("time")["response_length"].resample("1h").sum().rename("Bytes")
-            st.area_chart(bw_time, width="stretch")
-
-        # Response length percentiles
-        st.write("**Response-Größen-Statistiken**")
-        percentiles = calculate_percentiles(df["response_length"])
-        pcol1, pcol2, pcol3 = st.columns(3)
-        pcol1.metric("p50 (Median)", format_bytes(int(percentiles["p50"])))
-        pcol2.metric("p95", format_bytes(int(percentiles["p95"])))
-        pcol3.metric("p99", format_bytes(int(percentiles["p99"])))
-
-
-def render_geo_analysis(df: pd.DataFrame) -> None:
-    """Render geographic analysis if GeoIP data available."""
-    if df.empty:
-        return
-
-    has_geo_data = "country_code" in df.columns and not df["country_code"].isna().all()
-
-    if not has_geo_data:
-        st.divider()
-        st.subheader("Geografische Analyse")
-        st.info(
-            "GeoIP ist nicht konfiguriert. Für Länder- und Städteerkennung: "
-            "1) Kostenlosen Account bei [MaxMind](https://www.maxmind.com/en/geolite2/signup) erstellen, "
-            "2) MAXMIND_ACCOUNT_ID und MAXMIND_LICENSE_KEY in der .env setzen, "
-            "3) Container neu starten und Sync ausführen."
-        )
-        return
-
-    st.divider()
-    with st.expander("Geografische Analyse", expanded=True):
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.write("**Top 10 Länder**")
-            country_counts = df["country_code"].value_counts().head(10).reset_index()
-            country_counts.columns = ["Land", "Requests"]
-            st.dataframe(country_counts, width="stretch", hide_index=True)
-
-        with col2:
-            if "city" in df.columns and not df["city"].isna().all():
-                st.write("**Top 10 Städte**")
-                city_counts = df["city"].dropna().value_counts().head(10).reset_index()
-                city_counts.columns = ["Stadt", "Requests"]
-                st.dataframe(city_counts, width="stretch", hide_index=True)
-
-
-def render_referer_analysis(df: pd.DataFrame) -> None:
-    """Render referer analysis."""
-    if df.empty or "referer" not in df.columns:
-        return
-
-    referer_df = df[df["referer"].notna() & (df["referer"] != "")]
-    if referer_df.empty:
-        return
-
-    st.divider()
-    with st.expander("Referer-Analyse", expanded=True):
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.write("**Top 10 Referer**")
-            top_refs = referer_df["referer"].value_counts().head(10).reset_index()
-            top_refs.columns = ["Referer", "Requests"]
-            st.dataframe(top_refs, width="stretch", hide_index=True)
-
-        with col2:
-            st.write("**Referer-Domains**")
-            # Extract domain from referer URL
-            domains = referer_df["referer"].str.extract(r'https?://([^/]+)', expand=False).dropna()
-            if not domains.empty:
-                top_domains = domains.value_counts().head(10).reset_index()
-                top_domains.columns = ["Domain", "Requests"]
-                st.dataframe(top_domains, width="stretch", hide_index=True)
-
-
-def render_user_agent_analysis(df: pd.DataFrame) -> None:
-    """Render user agent analysis."""
-    if df.empty or "user_agent" not in df.columns:
-        return
-
-    st.divider()
-    with st.expander("Browser & Geräte", expanded=True):
-        # Parse user agents (only unique values, then map back)
-        unique_uas = df["user_agent"].dropna().unique()
-        ua_map = {ua: parse_user_agent(ua) for ua in unique_uas}
-        ua_data = df["user_agent"].dropna().map(ua_map).apply(pd.Series)
-
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            st.write("**Browser**")
-            browser_counts = ua_data["browser"].value_counts().reset_index()
-            browser_counts.columns = ["Browser", "Requests"]
-            st.dataframe(browser_counts, width="stretch", hide_index=True)
-
-        with col2:
-            st.write("**Betriebssystem**")
-            os_counts = ua_data["os"].value_counts().reset_index()
-            os_counts.columns = ["OS", "Requests"]
-            st.dataframe(os_counts, width="stretch", hide_index=True)
-
-        with col3:
-            st.write("**Gerätetyp**")
-            device_counts = ua_data["device"].value_counts().reset_index()
-            device_counts.columns = ["Gerät", "Requests"]
-            st.dataframe(device_counts, width="stretch", hide_index=True)
-
-        # Bot analysis
-        if "is_bot" in ua_data.columns:
-            bot_df = ua_data[ua_data["is_bot"] == True]
-            if not bot_df.empty:
-                st.write("**Bot-Traffic**")
-                bot_count = len(bot_df)
-                total_count = len(df)
-                bot_percentage = (bot_count / total_count) * 100
-                col1, col2 = st.columns(2)
-                col1.metric("Bot-Requests", format_number(bot_count))
-                col2.metric("Anteil", f"{bot_percentage:.1f}%")
-
-                # Top bots
-                st.write("**Top Bots**")
-                bot_uas = df.loc[bot_df.index, "user_agent"].value_counts().head(10).reset_index()
-                bot_uas.columns = ["User-Agent", "Requests"]
-                st.dataframe(bot_uas, width="stretch", hide_index=True)
-
-
-def render_request_log(df: pd.DataFrame) -> None:
-    """Render recent requests with pagination and export options."""
-    if df.empty:
-        return
-
-    st.divider()
-    with st.expander("Request Log", expanded=True):
-        # Export buttons and pagination controls
-        col1, col2, col3 = st.columns([2, 1, 1])
-
-        # Pagination settings
-        page_size = 100
-        total_rows = len(df)
-        total_pages = max(1, (total_rows + page_size - 1) // page_size)
-
-        with col1:
-            current_page = st.number_input(
-                "Seite",
-                min_value=1,
-                max_value=total_pages,
-                value=1,
-                step=1,
-                help=f"Seite 1-{total_pages} ({format_number(total_rows)} Einträge)",
-            )
-
-        with col2:
-            csv = df_to_csv(df)
-            st.download_button(
-                label="CSV Export",
-                data=csv,
-                file_name=f"npm_traffic_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-            )
-
-        with col3:
-            json_data = df_to_json(df)
-            st.download_button(
-                label="JSON Export",
-                data=json_data,
-                file_name=f"npm_traffic_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                mime="application/json",
-            )
-
-        # Display table with pagination
-        display_cols = ["time", "host", "method", "path", "status", "remote_addr"]
-        if "country_code" in df.columns and not df["country_code"].isna().all():
-            display_cols.append("country_code")
-
-        start_idx = (current_page - 1) * page_size
-        end_idx = min(start_idx + page_size, total_rows)
-
-        st.dataframe(
-            df[display_cols].iloc[start_idx:end_idx],
-            width="stretch",
-            hide_index=True,
-        )
-
-        st.caption(f"Zeige {start_idx + 1}-{end_idx} von {format_number(total_rows)} Einträgen")
+def get_newest():
+    return get_newest_timestamp()
 
 
 def main():
@@ -562,7 +124,15 @@ def main():
                 st.toast(f"{new_rows} neue Einträge", icon="✅")
 
     # Sidebar filters
-    selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query, selected_status = render_sidebar()
+    selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query, selected_status = (
+        render_sidebar(
+            cached_hosts=_cached_hosts,
+            cached_db_info=_cached_db_info,
+            get_newest_timestamp=get_newest,
+            sync_logs_callback=sync_logs,
+            cleanup_old_data_callback=cleanup_old_data,
+        )
+    )
 
     # Handle empty host selection
     if not selected_hosts:
@@ -603,6 +173,11 @@ def main():
         return
 
     # Render dashboard
+    render_dashboard(df, auto_refresh, refresh_interval)
+
+
+def render_dashboard(df: pd.DataFrame, auto_refresh: bool, refresh_interval: int):
+    """Render the main dashboard components."""
     render_metrics(df)
     st.divider()
     render_charts(df)

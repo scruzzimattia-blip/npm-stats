@@ -24,4 +24,3 @@ def sync_logs(since: Optional[datetime] = None) -> int:
 
     logger.info("Synced %d new entries", inserted)
     return inserted
-

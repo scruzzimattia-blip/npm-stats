@@ -44,6 +44,7 @@ class TTLCache:
 
             self._cache[key] = (value, now)
             return value
+
         return wrapper
 
 
@@ -53,18 +54,18 @@ ip_filter_cache = TTLCache(maxsize=4096, ttl=3600)
 
 # NPM access log pattern
 LOG_PATTERN = re.compile(
-    r'\[(?P<time_local>.+?)\]\s+-\s+(?P<status>\d{3})\s+(?P<upstream_status>\d{3}|-)\s+-\s+'
+    r"\[(?P<time_local>.+?)\]\s+-\s+(?P<status>\d{3})\s+(?P<upstream_status>\d{3}|-)\s+-\s+"
     r'(?P<method>\S+)\s+(?P<scheme>\S+)\s+(?P<host>\S+)\s+"(?P<path>[^"]*)"\s+'
-    r'\[Client\s+(?P<client_ip>[^\]]+)\]\s+\[Length\s+(?P<length>[^\]]+)\]\s+'
-    r'\[Gzip\s+(?P<gzip>[^\]]+)\]\s+\[Sent-to\s+(?P<sent_to>[^\]]+)\]\s+'
+    r"\[Client\s+(?P<client_ip>[^\]]+)\]\s+\[Length\s+(?P<length>[^\]]+)\]\s+"
+    r"\[Gzip\s+(?P<gzip>[^\]]+)\]\s+\[Sent-to\s+(?P<sent_to>[^\]]+)\]\s+"
     r'"(?P<user_agent>[^"]*)"\s+"(?P<referer>[^"]*)"'
 )
 
 # Fallback pattern for simpler log formats
 LOG_PATTERN_FALLBACK = re.compile(
-    r'(?P<time_local>\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2}\s+[+-]\d{4})\s+'
-    r'(?P<method>\w+)\s+(?P<path>[^\s]+)\s+'
-    r'(?P<status>\d{3})\s+(?P<length>\d+|-)\s+'
+    r"(?P<time_local>\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2}\s+[+-]\d{4})\s+"
+    r"(?P<method>\w+)\s+(?P<path>[^\s]+)\s+"
+    r"(?P<status>\d{3})\s+(?P<length>\d+|-)\s+"
     r'"(?P<user_agent>[^"]*)"\s+"(?P<referer>[^"]*)"'
 )
 
@@ -81,6 +82,7 @@ def init_geoip() -> bool:
 
     try:
         import geoip2.database
+
         if os.path.exists(app_config.geoip_db_path):
             _geoip_reader = geoip2.database.Reader(app_config.geoip_db_path)
             logger.info("GeoIP database loaded successfully")
@@ -232,7 +234,7 @@ def read_log_file(file_path: str, limit: int) -> Iterator[str]:
                     # Find first newline and discard partial line
                     newline_pos = chunk.find("\n")
                     if newline_pos != -1:
-                        chunk = chunk[newline_pos + 1:]
+                        chunk = chunk[newline_pos + 1 :]
 
                 chunk_lines = chunk.splitlines()
                 lines = chunk_lines + lines
@@ -264,20 +266,22 @@ def parse_single_log_file(file_path: str, limit: int, since: Optional[datetime])
         if parsed:
             if since and parsed["time"] <= since:
                 continue
-            rows.append((
-                parsed["time"],
-                parsed["host"],
-                parsed["method"],
-                parsed["path"],
-                parsed["status"],
-                parsed["remote_addr"],
-                parsed["user_agent"],
-                parsed["referer"],
-                parsed["response_length"],
-                parsed["country_code"],
-                parsed["city"],
-                parsed.get("scheme", "https"),
-            ))
+            rows.append(
+                (
+                    parsed["time"],
+                    parsed["host"],
+                    parsed["method"],
+                    parsed["path"],
+                    parsed["status"],
+                    parsed["remote_addr"],
+                    parsed["user_agent"],
+                    parsed["referer"],
+                    parsed["response_length"],
+                    parsed["country_code"],
+                    parsed["city"],
+                    parsed.get("scheme", "https"),
+                )
+            )
             file_rows += 1
 
     logger.debug(f"Parsed {file_rows} valid entries from {os.path.basename(file_path)}")
@@ -289,7 +293,7 @@ def parse_all_logs(limit_per_file: Optional[int] = None, since: Optional[datetim
 
     If since is provided, only entries newer than that timestamp are returned,
     and fewer lines per file are read since only recent entries are needed.
-    
+
     Uses parallel processing for better performance on multi-core systems.
     """
     if since and limit_per_file is None:
@@ -306,10 +310,7 @@ def parse_all_logs(limit_per_file: Optional[int] = None, since: Optional[datetim
 
     if max_workers > 1:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {
-                executor.submit(parse_single_log_file, fp, limit, since): fp
-                for fp in log_files
-            }
+            futures = {executor.submit(parse_single_log_file, fp, limit, since): fp for fp in log_files}
             for future in as_completed(futures):
                 try:
                     file_rows = future.result()

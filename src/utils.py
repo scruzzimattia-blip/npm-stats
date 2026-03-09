@@ -52,59 +52,84 @@ def get_time_ranges() -> dict[str, tuple[Optional[datetime], Optional[datetime]]
     }
 
 
-def parse_user_agent(ua: str) -> dict[str, str]:
+def _get_browser(ua_lower: str) -> str:
+    """Helper to detect browser from UA."""
+    if "firefox" in ua_lower:
+        return "Firefox"
+    if "edg" in ua_lower:
+        return "Edge"
+    if "chrome" in ua_lower:
+        return "Chrome"
+    if "safari" in ua_lower:
+        return "Safari"
+    if "opera" in ua_lower or "opr" in ua_lower:
+        return "Opera"
+    return "Unbekannt"
+
+
+def _get_os(ua_lower: str) -> str:
+    """Helper to detect OS from UA."""
+    if "windows" in ua_lower:
+        return "Windows"
+    if "mac os" in ua_lower or "macos" in ua_lower:
+        return "macOS"
+    if "linux" in ua_lower:
+        return "Linux"
+    if "android" in ua_lower:
+        return "Android"
+    if "iphone" in ua_lower or "ipad" in ua_lower:
+        return "iOS"
+    return "Unbekannt"
+
+
+def _get_device_type(ua_lower: str) -> str:
+    """Helper to detect device type from UA."""
+    if "bot" in ua_lower or "crawler" in ua_lower or "spider" in ua_lower:
+        return "Bot"
+    if "mobile" in ua_lower or "android" in ua_lower:
+        return "Mobile"
+    if "tablet" in ua_lower or "ipad" in ua_lower:
+        return "Tablet"
+    return "Desktop"
+
+
+def parse_user_agent(ua: str) -> dict[str, str | bool]:
     """Parse user agent string into components."""
     ua_lower = ua.lower() if ua else ""
 
-    # Detect browser
-    browser = "Unbekannt"
-    if "firefox" in ua_lower:
-        browser = "Firefox"
-    elif "edg" in ua_lower:
-        browser = "Edge"
-    elif "chrome" in ua_lower:
-        browser = "Chrome"
-    elif "safari" in ua_lower:
-        browser = "Safari"
-    elif "opera" in ua_lower or "opr" in ua_lower:
-        browser = "Opera"
-
-    # Detect OS
-    os_name = "Unbekannt"
-    if "windows" in ua_lower:
-        os_name = "Windows"
-    elif "mac os" in ua_lower or "macos" in ua_lower:
-        os_name = "macOS"
-    elif "linux" in ua_lower:
-        os_name = "Linux"
-    elif "android" in ua_lower:
-        os_name = "Android"
-    elif "iphone" in ua_lower or "ipad" in ua_lower:
-        os_name = "iOS"
-
-    # Detect device type
-    device = "Desktop"
-    if "mobile" in ua_lower or "android" in ua_lower:
-        device = "Mobile"
-    elif "tablet" in ua_lower or "ipad" in ua_lower:
-        device = "Tablet"
-    elif "bot" in ua_lower or "crawler" in ua_lower or "spider" in ua_lower:
-        device = "Bot"
+    browser = _get_browser(ua_lower)
+    os_name = _get_os(ua_lower)
+    device = _get_device_type(ua_lower)
 
     # Detect bot/crawler
-    is_bot = device == "Bot" or any(x in ua_lower for x in [
-        "bot", "crawler", "spider", "scraper", "curl", "wget",
-        "python", "go-http", "java/", "node", "fetch", "preview",
-        "bingpreview", "googlebot", "duckduckbot", "yandex", "baiduspider",
-        "facebookexternalhit", "twitterbot", "slackbot", "telegrambot"
-    ])
+    is_bot = device == "Bot" or any(
+        x in ua_lower
+        for x in [
+            "bot",
+            "crawler",
+            "spider",
+            "scraper",
+            "curl",
+            "wget",
+            "python",
+            "go-http",
+            "java/",
+            "node",
+            "fetch",
+            "preview",
+            "bingpreview",
+            "googlebot",
+            "duckduckbot",
+            "yandex",
+            "baiduspider",
+            "facebookexternalhit",
+            "twitterbot",
+            "slackbot",
+            "telegrambot",
+        ]
+    )
 
-    return {
-        "browser": browser,
-        "os": os_name,
-        "device": device,
-        "is_bot": is_bot,
-    }
+    return {"browser": browser, "os": os_name, "device": device, "is_bot": is_bot}
 
 
 def get_status_category(status: int) -> str:
