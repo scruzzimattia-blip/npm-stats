@@ -8,7 +8,8 @@ from typing import Any, Generator, List, Optional, Tuple
 import pandas as pd
 import psycopg
 from psycopg import Connection
-from psycopg.extras import RealDictCursor, execute_batch
+from psycopg import rows as psycopg_rows
+from psycopg.extras import execute_batch
 from psycopg.pool import ThreadedConnectionPool
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -228,7 +229,7 @@ def get_traffic_stats(
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
     with get_connection() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
             cur.execute(
                 f"""
                 SELECT
@@ -250,7 +251,7 @@ def get_traffic_stats(
 def get_database_info() -> dict:
     """Get database statistics."""
     with get_connection() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
             cur.execute("""
                 SELECT
                     COUNT(*) as total_rows,
