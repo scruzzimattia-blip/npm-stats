@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from .database import init_database, insert_traffic_batch, get_newest_timestamp
+from .database import get_newest_timestamp, init_database, insert_traffic_batch
 from .log_parser import parse_all_logs
 
 logger = logging.getLogger(__name__)

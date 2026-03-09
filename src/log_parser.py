@@ -1,52 +1,47 @@
 """Log parsing module for NPM Monitor."""
 
 import glob
+import ipaddress
 import logging
 import os
 import re
-import ipaddress
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from typing import List, Tuple, Optional, Iterator, Dict, Any
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
-from .config import (
-    app_config,
-    PRIVATE_NETWORKS,
-    CLOUDFLARE_NETWORKS,
-    get_ignored_ips
-)
+from .config import CLOUDFLARE_NETWORKS, PRIVATE_NETWORKS, app_config, get_ignored_ips
 
 logger = logging.getLogger(__name__)
 
 
 class TTLCache:
     """Simple TTL cache implementation."""
-    
+
     def __init__(self, maxsize: int = 4096, ttl: int = 3600):
         self._cache: Dict[Tuple, Tuple[Any, float]] = {}
         self._maxsize = maxsize
         self._ttl = ttl
-    
+
     def __call__(self, func):
         def wrapper(*args, **kwargs):
             key = (args, tuple(sorted(kwargs.items())))
             now = time.time()
-            
+
             if key in self._cache:
                 value, timestamp = self._cache[key]
                 if now - timestamp < self._ttl:
                     return value
                 else:
                     del self._cache[key]
-            
+
             value = func(*args, **kwargs)
-            
+
             # Evict oldest if cache is full
             if len(self._cache) >= self._maxsize:
                 oldest = min(self._cache.items(), key=lambda x: x[1][1])
                 del self._cache[oldest[0]]
-            
+
             self._cache[key] = (value, now)
             return value
         return wrapper
@@ -148,19 +143,19 @@ def should_ignore_ip(ip_str: str) -> bool:
 def parse_log_line(line: str) -> Optional[Dict[str, Any]]:
     """Parse a single log line and return extracted data."""
     match = LOG_PATTERN.match(line)
-    
+
     if not match:
         # Try fallback pattern
         match = LOG_PATTERN_FALLBACK.match(line)
         if not match:
             logger.debug(f"Failed to parse log line: {line[:100]}...")
             return None
-        
+
         data = match.groupdict()
         client_ip = "-"
         host = "-"
         scheme = "http"
-        
+
     else:
         data = match.groupdict()
         client_ip = data["client_ip"].strip()
@@ -263,7 +258,7 @@ def parse_single_log_file(file_path: str, limit: int, since: Optional[datetime])
     """Parse a single log file and return parsed rows."""
     rows = []
     file_rows = 0
-    
+
     for line in read_log_file(file_path, limit):
         parsed = parse_log_line(line)
         if parsed:
@@ -284,7 +279,7 @@ def parse_single_log_file(file_path: str, limit: int, since: Optional[datetime])
                 parsed.get("scheme", "https"),
             ))
             file_rows += 1
-    
+
     logger.debug(f"Parsed {file_rows} valid entries from {os.path.basename(file_path)}")
     return rows
 
@@ -308,11 +303,11 @@ def parse_all_logs(limit_per_file: Optional[int] = None, since: Optional[datetim
     # Use parallel processing for better performance
     max_workers = min(4, len(log_files)) if log_files else 1
     rows = []
-    
+
     if max_workers > 1:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
-                executor.submit(parse_single_log_file, fp, limit, since): fp 
+                executor.submit(parse_single_log_file, fp, limit, since): fp
                 for fp in log_files
             }
             for future in as_completed(futures):

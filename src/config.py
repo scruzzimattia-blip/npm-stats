@@ -1,10 +1,10 @@
 """Configuration module for NPM Monitor."""
 
-import os
 import ipaddress
+import os
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Set, List
+from typing import List
 
 
 @dataclass

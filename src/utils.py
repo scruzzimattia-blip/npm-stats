@@ -1,6 +1,5 @@
 """Utility functions for NPM Monitor."""
 
-import json
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
@@ -94,7 +93,7 @@ def parse_user_agent(ua: str) -> dict[str, str]:
 
     # Detect bot/crawler
     is_bot = device == "Bot" or any(x in ua_lower for x in [
-        "bot", "crawler", "spider", "scraper", "curl", "wget", 
+        "bot", "crawler", "spider", "scraper", "curl", "wget",
         "python", "go-http", "java/", "node", "fetch", "preview",
         "bingpreview", "googlebot", "duckduckbot", "yandex", "baiduspider",
         "facebookexternalhit", "twitterbot", "slackbot", "telegrambot"
@@ -149,13 +148,13 @@ def get_relative_time(dt: datetime) -> str:
         return "Nie"
 
     now = datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now()
-    
+
     # Convert dt to same timezone as now for accurate comparison
     if dt.tzinfo and not now.tzinfo:
         now = now.replace(tzinfo=dt.tzinfo)
     elif not dt.tzinfo and now.tzinfo:
         dt = dt.replace(tzinfo=now.tzinfo)
-    
+
     diff = now - dt
 
     if diff.total_seconds() < 60:

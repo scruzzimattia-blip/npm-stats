@@ -3,7 +3,7 @@
 import logging
 import time
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Optional
 
 import pandas as pd
 import streamlit as st
@@ -11,27 +11,26 @@ import streamlit as st
 from .config import app_config
 from .database import (
     cleanup_old_data,
-    get_distinct_hosts,
-    get_traffic_stats,
     get_database_info,
+    get_distinct_hosts,
+    get_newest_timestamp,
     health_check,
     load_traffic_df,
-    get_newest_timestamp,
 )
 from .log_parser import init_geoip
 from .sync import sync_logs as _sync_logs_core
 from .utils import (
-    setup_logging,
-    format_number,
-    format_bytes,
     calculate_error_rate,
     calculate_percentiles,
-    get_time_ranges,
-    parse_user_agent,
-    get_status_category,
     df_to_csv,
     df_to_json,
+    format_bytes,
+    format_number,
     get_relative_time,
+    get_status_category,
+    get_time_ranges,
+    parse_user_agent,
+    setup_logging,
 )
 
 logger = logging.getLogger(__name__)
@@ -447,7 +446,7 @@ def render_user_agent_analysis(df: pd.DataFrame) -> None:
                 col1, col2 = st.columns(2)
                 col1.metric("Bot-Requests", format_number(bot_count))
                 col2.metric("Anteil", f"{bot_percentage:.1f}%")
-                
+
                 # Top bots
                 st.write("**Top Bots**")
                 bot_uas = df.loc[bot_df.index, "user_agent"].value_counts().head(10).reset_index()

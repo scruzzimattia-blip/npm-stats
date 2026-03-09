@@ -3,17 +3,16 @@
 import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta
-from typing import List, Tuple, Optional, Generator, Any
+from typing import Any, Generator, List, Optional, Tuple
 
+import pandas as pd
 import psycopg2
-from psycopg2.extras import execute_batch, RealDictCursor
+from psycopg2.extras import RealDictCursor, execute_batch
 from psycopg2.pool import ThreadedConnectionPool
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import SQLAlchemyError
-import pandas as pd
 
-from .config import db_config, app_config
+from .config import app_config, db_config
 
 logger = logging.getLogger(__name__)
 
