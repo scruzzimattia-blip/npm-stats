@@ -9,7 +9,6 @@ import pandas as pd
 import psycopg
 from psycopg import Connection
 from psycopg import rows as psycopg_rows
-from psycopg.extras import execute_batch
 from psycopg.pool import ThreadedConnectionPool
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -173,7 +172,7 @@ def insert_traffic_batch(rows: List[Tuple]) -> int:
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (time, host, remote_addr, path) DO NOTHING;
             """
-            execute_batch(cur, query, rows, page_size=1000)
+            cur.executemany(query, rows)
             return cur.rowcount
 
 
