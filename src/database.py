@@ -6,9 +6,10 @@ from datetime import datetime, timedelta
 from typing import Any, Generator, List, Optional, Tuple
 
 import pandas as pd
-import psycopg2
-from psycopg2.extras import RealDictCursor, execute_batch
-from psycopg2.pool import ThreadedConnectionPool
+import psycopg
+from psycopg import Connection
+from psycopg.extras import RealDictCursor, execute_batch
+from psycopg.pool import ThreadedConnectionPool
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
@@ -66,7 +67,7 @@ def get_engine() -> Engine:
 
 
 @contextmanager
-def get_connection() -> Generator[psycopg2.extensions.connection, None, None]:
+def get_connection() -> Generator[Connection, None, None]:
     """Context manager for database connections from the pool."""
     pool = get_pool()
     conn = pool.getconn()
