@@ -46,7 +46,7 @@ def get_pool() -> ConnectionPool:
     global _pool
     if _pool is None:
         _pool = ConnectionPool(
-            conninfo=db_config.connection_string,
+            conninfo=db_config.psycopg_connection_string,
             min_size=db_config.pool_min_conn,
             max_size=db_config.pool_max_conn,
             open=True,
@@ -70,7 +70,7 @@ def get_connection() -> Generator[Connection, None, None]:
     with pool.connection() as conn:
         try:
             with conn.cursor() as cur:
-                cur.execute("SET statement_timeout = %s", (QUERY_TIMEOUT * 1000,))
+                cur.execute(f"SET statement_timeout = {QUERY_TIMEOUT * 1000}")
             yield conn
             conn.commit()
         except Exception as e:

@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import List
+from urllib.parse import quote_plus
 
 
 @dataclass
@@ -21,7 +22,12 @@ class DatabaseConfig:
 
     @property
     def connection_string(self) -> str:
-        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+        password = quote_plus(self.password)
+        return f"postgresql+psycopg://{self.user}:{password}@{self.host}:{self.port}/{self.name}"
+
+    @property
+    def psycopg_connection_string(self) -> str:
+        return f"host={self.host} port={self.port} dbname={self.name} user={self.user} password={self.password}"
 
 
 @dataclass
