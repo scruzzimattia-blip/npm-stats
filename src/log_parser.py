@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import time
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional, Tuple
@@ -16,36 +17,47 @@ logger = logging.getLogger(__name__)
 
 
 class TTLCache:
-    """Simple TTL cache implementation."""
+    """Thread-safe LRU cache with TTL support using OrderedDict."""
 
     def __init__(self, maxsize: int = 4096, ttl: int = 3600):
-        self._cache: Dict[Tuple, Tuple[Any, float]] = {}
+        self._cache: OrderedDict = OrderedDict()
         self._maxsize = maxsize
         self._ttl = ttl
+        self._lock = __import__("threading").Lock()
 
     def __call__(self, func):
         def wrapper(*args, **kwargs):
             key = (args, tuple(sorted(kwargs.items())))
             now = time.time()
 
-            if key in self._cache:
-                value, timestamp = self._cache[key]
-                if now - timestamp < self._ttl:
-                    return value
-                else:
-                    del self._cache[key]
+            with self._lock:
+                if key in self._cache:
+                    value, timestamp = self._cache[key]
+                    if now - timestamp < self._ttl:
+                        self._cache.move_to_end(key)
+                        return value
+                    else:
+                        del self._cache[key]
 
             value = func(*args, **kwargs)
 
-            # Evict oldest if cache is full
-            if len(self._cache) >= self._maxsize:
-                oldest = min(self._cache.items(), key=lambda x: x[1][1])
-                del self._cache[oldest[0]]
+            with self._lock:
+                if key in self._cache:
+                    self._cache[key] = (value, now)
+                    self._cache.move_to_end(key)
+                else:
+                    self._cache[key] = (value, now)
+                    if len(self._cache) > self._maxsize:
+                        self._cache.popitem(last=False)
 
-            self._cache[key] = (value, now)
             return value
 
         return wrapper
+
+    def clear(self):
+        """Clear the cache."""
+        with self._lock:
+            self._cache.clear()
 
 
 # TTL cache with 1 hour expiry and max 4096 entries
