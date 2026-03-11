@@ -1,5 +1,6 @@
 """Streamlit UI components for NPM Monitor."""
 
+from .blocking import render_blocked_ips, render_blocking_config, render_blocking_stats
 from .charts import (
     render_bandwidth_analysis,
     render_charts,
@@ -22,4 +23,7 @@ __all__ = [
     "render_metrics",
     "render_top_ips",
     "render_request_log",
+    "render_blocked_ips",
+    "render_blocking_config",
+    "render_blocking_stats",
 ]
