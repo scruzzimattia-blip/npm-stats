@@ -15,6 +15,7 @@ Traffic-Monitoring-Dashboard für Nginx Proxy Manager (NPM).
 - **Connection Pooling**: Effiziente Datenbankverbindungen
 - **Health Checks**: Docker Health Checks für zuverlässigen Betrieb
 - **Sicherheit**: Passwort-Authentifizierung und IP-basierte Zugriffskontrolle
+- **🚫 Auto-Blocking**: Automatische IP-Sperrung bei Angriffsmustern (Fail2Ban-ähnlich)
 
 ## Installation
 
@@ -198,6 +199,62 @@ pre-commit run --all-files
 ### Beitragen
 
 Siehe [CONTRIBUTING.md](CONTRIBUTING.md) für Richtlinien.
+
+## 🚫 Auto-Blocking (Fail2Ban-ähnlich)
+
+NPM Monitor kann IPs automatisch sperren, die verdächtige Aktivitäten zeigen.
+
+### Wie es funktioniert
+
+1. **Angriffserkennung**: Überwacht Traffic auf verdächtige Muster
+2. **Schwellwerte**: Sperrt bei Überschreitung konfigurierter Limits
+3. **Automatische Sperrung**: Blockiert IPs temporär
+4. **Dashboard**: Verwaltung gesperrter IPs über UI
+
+### Erkannte Angriffsmuster
+
+- **404-Fehler**: Zu viele nicht existierende Seiten angefordert
+- **403-Fehler**: Zu viele verbotene Zugriffe
+- **5xx-Fehler**: Zu viele Server-Fehler verursacht
+- **Verdächtige Pfade**: Zugriff auf `/wp-admin`, `/phpmyadmin`, `.env`, etc.
+- **Gesamt-Fehler**: Zu viele fehlgeschlagene Requests
+
+### Konfiguration
+
+```bash
+# Blocking aktivieren/deaktivieren
+ENABLE_BLOCKING=true
+
+# Sperrdauer (Sekunden)
+BLOCK_DURATION=3600  # 1 Stunde
+
+# Schwellwerte
+MAX_404_ERRORS=20      # Max. 404-Fehler pro 5 Minuten
+MAX_403_ERRORS=10      # Max. 403-Fehler pro 5 Minuten
+MAX_5XX_ERRORS=50      # Max. 5xx-Fehler pro 5 Minuten
+MAX_FAILED_REQUESTS=100  # Max. fehlgeschlagene Requests pro 5 Minuten
+
+# Verdächtige Pfade (comma-separiert)
+SUSPICIOUS_PATHS=/wp-admin,/wp-login.php,/phpmyadmin,.env,.git
+```
+
+### IP-Whitelist
+
+IPs können von der Sperrung ausgenommen werden:
+
+```python
+from src.blocking import get_blocker
+
+blocker = get_blocker()
+blocker.whitelist_ip("192.168.1.100")
+```
+
+### Manuelle Verwaltung
+
+Über das Dashboard können gesperrte IPs:
+- Angesehen werden (mit Grund und Dauer)
+- Manuell entsperrt werden
+- Zur Whitelist hinzugefügt werden
 
 ## Lizenz
 
