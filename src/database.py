@@ -140,6 +140,9 @@ def init_database() -> bool:
                     ("idx_traffic_status", "traffic (status)"),
                     ("idx_traffic_time_host", "traffic (time DESC, host)"),
                     ("idx_traffic_country", "traffic (country_code)"),
+                    # Additional composite indexes for common query patterns
+                    ("idx_traffic_host_status", "traffic (host, status)"),
+                    ("idx_traffic_time_status", "traffic (time DESC, status)"),
                 ]
 
                 for idx_name, idx_def in indexes:
