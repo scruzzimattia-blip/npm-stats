@@ -160,6 +160,48 @@ docker compose up -d
 
 Im Dashboard den "CSV Export" Button verwenden.
 
+## 🔥 Host-basiertes Firewall-Blocking
+
+### Installation
+
+```bash
+# 1. Install-Script ausführen
+cd ~/npm-stats
+sudo ./scripts/install-iptables.sh
+
+# 2. Datenbank-Zugangsdaten eingeben
+# (wird automatisch abgefragt)
+
+# 3. Testen
+sudo iptables -L NPM_MONITOR -n
+```
+
+### Automatische Installation
+
+Das Install-Script macht alles automatisch:
+- ✅ Installiert iptables-Sync-Script
+- ✅ Erstellt Konfiguration
+- ✅ Installiert Systemd Timer
+- ✅ Testet Datenbank-Verbindung
+- ✅ Startet Service
+
+### Manuelle Installation
+
+Siehe [docs/HOST_IPTABLES.md](docs/HOST_IPTABLES.md) für detaillierte Anleitung.
+
+### Status prüfen
+
+```bash
+# Service-Status
+sudo systemctl status npm-monitor-iptables.timer
+
+# Logs
+sudo journalctl -u npm-monitor-iptables -f
+
+# Geblockte IPs
+sudo iptables -L NPM_MONITOR -n -v
+```
+
 ## Gefilterte IPs
 
 Automatisch gefiltert werden:

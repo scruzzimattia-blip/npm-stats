@@ -1,0 +1,10 @@
+[Unit]
+Description=NPM Monitor iptables Sync Timer
+After=network.target postgresql.service
+
+[Timer]
+OnCalendar=*:0/1:*
+Persistent=true
+
+[Install]
+WantedBy=timers.target
