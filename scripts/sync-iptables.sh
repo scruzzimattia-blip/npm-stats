@@ -4,6 +4,11 @@
 
 set -e
 
+# Load configuration from file
+if [ -f /etc/npm-monitor/iptables-sync.conf ]; then
+    source /etc/npm-monitor/iptables-sync.conf
+fi
+
 # Configuration
 DB_HOST="${DB_HOST:-shared-postgres}"
 DB_PORT="${DB_PORT:-5432}"
@@ -31,7 +36,7 @@ create_chain() {
 
 # Get blocked IPs from database
 get_blocked_ips() {
-    psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "
+    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "
         SELECT ip_address 
         FROM blocklist 
         WHERE unblocked_at IS NULL 
@@ -84,7 +89,7 @@ sync_ips() {
 
 # Cleanup expired blocks from database
 cleanup_database() {
-    psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
+    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
         UPDATE blocklist 
         SET unblocked_at = NOW() 
         WHERE unblocked_at IS NULL 
