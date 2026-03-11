@@ -1,0 +1,19 @@
+[Unit]
+Description=NPM Monitor iptables Sync Service
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/npm-monitor-sync-iptables.sh
+User=root
+Group=root
+EnvironmentFile=/etc/npm-monitor/iptables-sync.conf
+
+[Timer]
+Description=Run NPM Monitor iptables sync every minute
+OnCalendar=*:*:0
+Persistent=true
+
+[Install]
+WantedBy=timers.target
