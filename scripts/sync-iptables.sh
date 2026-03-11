@@ -84,7 +84,13 @@ sync_ips() {
         done
     fi
     
-    log "Sync complete. Blocked IPs: $(echo "$blocked_ips" | wc -l)"
+    # Count active blocks
+    if [ -z "$blocked_ips" ] || [ "$blocked_ips" = "" ]; then
+        blocked_count=0
+    else
+        blocked_count=$(echo "$blocked_ips" | wc -l)
+    fi
+    log "Sync complete. Blocked IPs: $blocked_count"
 }
 
 # Cleanup expired blocks from database
