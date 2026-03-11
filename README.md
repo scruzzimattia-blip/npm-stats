@@ -14,6 +14,7 @@ Traffic-Monitoring-Dashboard für Nginx Proxy Manager (NPM).
 - **Daten-Retention**: Automatische Bereinigung alter Daten
 - **Connection Pooling**: Effiziente Datenbankverbindungen
 - **Health Checks**: Docker Health Checks für zuverlässigen Betrieb
+- **Sicherheit**: Passwort-Authentifizierung und IP-basierte Zugriffskontrolle
 
 ## Installation
 
@@ -49,6 +50,10 @@ docker compose up -d --build
 | `RETENTION_DAYS` | 30 | Tage bis zur Datenbereinigung |
 | `ENABLE_GEOIP` | false | GeoIP aktivieren |
 | `IGNORED_IPS` | - | Komma-getrennte IPs zum Ignorieren |
+| `ENABLE_AUTH` | true | Authentifizierung aktivieren |
+| `AUTH_USERNAME` | admin | Dashboard-Benutzername |
+| `AUTH_PASSWORD` | - | **Pflicht**: Dashboard-Passwort |
+| `ALLOWED_NETWORKS` | 127.0.0.1/32 | Erlaubte IP-Netzwerke (comma-separiert) |
 
 ### GeoIP aktivieren
 
@@ -73,21 +78,65 @@ ENABLE_GEOIP=true
 docker compose up -d --build
 ```
 
+## Sicherheit
+
+### Authentifizierung
+
+NPM Monitor bietet zwei Sicherheitsebenen:
+
+1. **Passwort-Authentifizierung**: 
+   - Setze `ENABLE_AUTH=true` (Standard)
+   - Konfiguriere `AUTH_USERNAME` und `AUTH_PASSWORD`
+   - Sessions werden automatisch verwaltet
+
+2. **IP-basierte Zugriffskontrolle**:
+   - Beschränke Zugriff auf bestimmte Netzwerke mit `ALLOWED_NETWORKS`
+   - Beispiel: `ALLOWED_NETWORKS=192.168.1.0/24,10.0.0.0/8`
+   - Standard: Nur Localhost (`127.0.0.1/32`)
+
+### Best Practices
+
+- Ändere das Standard-Passwort sofort
+- Verwende starke Passwörter (min. 12 Zeichen)
+- Beschränke `ALLOWED_NETWORKS` auf vertrauenswürdige Netze
+- Verwende HTTPS über einen Reverse Proxy
+- Halte MaxMind API-Keys geheim
+- Commite niemals `.env` Dateien
+
+### Sicherheitshärtung
+
+Docker Container sind bereits gesichert:
+- Non-root User (appuser)
+- Read-only Dateisystem
+- `no-new-privileges` Security Option
+- Netzwerk-Isolation (internal network)
+- Resource Limits (1GB RAM, 1 CPU)
+
 ## Struktur
 
 ```
 npm-monitor/
 ├── src/
 │   ├── app.py          # Streamlit Dashboard
+│   ├── auth.py         # Authentifizierung
 │   ├── config.py       # Konfiguration
 │   ├── database.py     # DB-Operationen
 │   ├── log_parser.py   # Log-Parsing
-│   └── utils.py        # Hilfsfunktionen
+│   ├── sync.py         # Log-Synchronisation
+│   ├── utils.py        # Hilfsfunktionen
+│   └── components/    # UI-Komponenten
+│       ├── charts.py
+│       ├── tables.py
+│       └── sidebar.py
+├── tests/             # Test-Suite
+├── docs/              # Dokumentation
+│   ├── API.md
+│   └── ARCHITECTURE.md
 ├── docker-compose.yml
 ├── Dockerfile
-├── requirements.txt
-├── .env                # Konfiguration (nicht committen!)
-└── .env.example        # Beispiel-Konfiguration
+├── pyproject.toml     # Python-Projektkonfiguration
+├── .env               # Konfiguration (nicht committen!)
+└── .env.example       # Beispiel-Konfiguration
 ```
 
 ## Wartung
@@ -117,6 +166,38 @@ Automatisch gefiltert werden:
 - Localhost (127.0.0.0/8)
 - Cloudflare IPs (alle offiziellen Bereiche)
 - Benutzerdefinierte IPs (via `IGNORED_IPS`)
+
+## Entwicklung
+
+### Tests ausführen
+
+```bash
+# Alle Tests
+python3 -m pytest tests/ -v
+
+# Mit Coverage
+python3 -m pytest tests/ --cov=src --cov-report=html
+
+# Spezifischer Test
+python3 -m pytest tests/test_database.py -v
+```
+
+### Code-Qualität
+
+```bash
+# Linting
+ruff check src/
+
+# Formatierung
+ruff format src/
+
+# Pre-commit hooks
+pre-commit run --all-files
+```
+
+### Beitragen
+
+Siehe [CONTRIBUTING.md](CONTRIBUTING.md) für Richtlinien.
 
 ## Lizenz
 
