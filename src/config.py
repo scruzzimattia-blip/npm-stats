@@ -61,6 +61,7 @@ class AppConfig:
             if p.strip()
         ]
     )
+    use_firewall: bool = field(default_factory=lambda: os.getenv("USE_FIREWALL", "false").lower() == "true")
 
 
 # Private IP networks to filter out
