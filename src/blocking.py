@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class IPBlocker:
     """Automatic IP blocking based on attack patterns."""
 
-    def __init__(self):
+    def __init__(self, use_firewall: bool = False):
         self.request_counts: Dict[str, Dict[str, int]] = defaultdict(
             lambda: {
                 "404": 0,
@@ -26,6 +26,25 @@ class IPBlocker:
         self.request_timestamps: Dict[str, List[datetime]] = defaultdict(list)
         self.blocked_ips: Dict[str, datetime] = {}  # IP -> block_until
         self.whitelisted_ips: Set[str] = set()
+        self.use_firewall = use_firewall
+
+        # Initialize firewall manager if enabled
+        self._iptables = None
+        if use_firewall:
+            try:
+                from .firewall import get_iptables_manager
+
+                self._iptables = get_iptables_manager()
+                if self._iptables.has_permissions:
+                    logger.info("Firewall-level blocking enabled (iptables)")
+                    # Create chain for NPM Monitor rules
+                    self._iptables.create_chain()
+                else:
+                    logger.warning("Firewall permissions not available, using application-level blocking only")
+                    self.use_firewall = False
+            except Exception as e:
+                logger.error(f"Failed to initialize iptables: {e}")
+                self.use_firewall = False
 
     def check_request(
         self, ip: str, status: int, path: str, host: str = ""
@@ -133,6 +152,13 @@ class IPBlocker:
         block_until = datetime.now() + timedelta(seconds=app_config.block_duration)
         self.blocked_ips[ip] = block_until
 
+        # Block at firewall level if enabled
+        if self.use_firewall and self._iptables:
+            try:
+                self._iptables.block_ip(ip, reason)
+            except Exception as e:
+                logger.error(f"Failed to block IP {ip} at firewall level: {e}")
+
         # Reset counters after blocking
         self.request_counts[ip] = {
             "404": 0,
@@ -148,15 +174,19 @@ class IPBlocker:
         if ip in self.whitelisted_ips:
             return False
 
-        if ip not in self.blocked_ips:
-            return False
+        # Check application-level block
+        if ip in self.blocked_ips:
+            # Check if block has expired
+            if datetime.now() > self.blocked_ips[ip]:
+                del self.blocked_ips[ip]
+                return False
+            return True
 
-        # Check if block has expired
-        if datetime.now() > self.blocked_ips[ip]:
-            del self.blocked_ips[ip]
-            return False
+        # Check firewall-level block if enabled
+        if self.use_firewall and self._iptables:
+            return self._iptables.is_blocked(ip)
 
-        return True
+        return False
 
     def get_block_reason(self, ip: str) -> Optional[str]:
         """Get the reason why an IP is blocked."""
@@ -167,11 +197,25 @@ class IPBlocker:
 
     def unblock_ip(self, ip: str) -> bool:
         """Manually unblock an IP."""
+        unblocked = False
+
+        # Unblock from application-level
         if ip in self.blocked_ips:
             del self.blocked_ips[ip]
+            unblocked = True
+
+        # Unblock from firewall level
+        if self.use_firewall and self._iptables:
+            try:
+                self._iptables.unblock_ip(ip)
+                unblocked = True
+            except Exception as e:
+                logger.error(f"Failed to unblock IP {ip} at firewall level: {e}")
+
+        if unblocked:
             logger.info(f"IP {ip} has been unblocked")
-            return True
-        return False
+
+        return unblocked
 
     def whitelist_ip(self, ip: str):
         """Add IP to whitelist (never block)."""
@@ -209,9 +253,13 @@ class IPBlocker:
 _blocker: Optional[IPBlocker] = None
 
 
-def get_blocker() -> IPBlocker:
-    """Get or create the global blocker instance."""
+def get_blocker(use_firewall: bool = False) -> IPBlocker:
+    """Get or create the global blocker instance.
+    
+    Args:
+        use_firewall: Enable firewall-level blocking with iptables
+    """
     global _blocker
     if _blocker is None:
-        _blocker = IPBlocker()
+        _blocker = IPBlocker(use_firewall=use_firewall)
     return _blocker
