@@ -70,7 +70,7 @@ def get_connection() -> Generator[Connection, None, None]:
     with pool.connection() as conn:
         try:
             with conn.cursor() as cur:
-                cur.execute(f"SET statement_timeout = {QUERY_TIMEOUT * 1000}")
+                cur.execute("SET statement_timeout = '30s'")
             yield conn
             conn.commit()
         except Exception as e:
