@@ -183,16 +183,26 @@ def main():
 
 def render_dashboard(df: pd.DataFrame, auto_refresh: bool, refresh_interval: int):
     """Render the main dashboard components."""
-    render_metrics(df)
-    st.divider()
-    render_charts(df)
-    render_top_ips(df)
-    render_error_paths(df)
-    render_bandwidth_analysis(df)
-    render_geo_analysis(df)
-    render_referer_analysis(df)
-    render_user_agent_analysis(df)
-    render_request_log(df)
+    # Create tabs for main content and blocked IPs
+    tab1, tab2 = st.tabs(["📊 Dashboard", "🚫 Blocked IPs"])
+    
+    with tab1:
+        render_metrics(df)
+        st.divider()
+        render_charts(df)
+        render_top_ips(df)
+        render_error_paths(df)
+        render_bandwidth_analysis(df)
+        render_geo_analysis(df)
+        render_referer_analysis(df)
+        render_user_agent_analysis(df)
+        render_request_log(df)
+    
+    with tab2:
+        from .components.blocking import render_blocked_ips, render_blocking_config
+        render_blocked_ips()
+        st.divider()
+        render_blocking_config()
 
     # Auto-refresh: sync new data and rerun
     if auto_refresh:
