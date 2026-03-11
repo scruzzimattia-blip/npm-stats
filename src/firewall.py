@@ -16,13 +16,17 @@ class IptablesManager:
     def __init__(self):
         self.available = self._check_iptables_available()
         self.has_permissions = self._check_permissions()
+        self.use_sudo = not self.has_permissions
+
+    def _run_iptables(self, args: List[str]) -> subprocess.CompletedProcess:
+        """Run iptables command with optional sudo."""
+        cmd = ["sudo", "iptables"] + args if self.use_sudo else ["iptables"] + args
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=5)
 
     def _check_iptables_available(self) -> bool:
         """Check if iptables is available on the system."""
         try:
-            result = subprocess.run(
-                ["iptables", "--version"], capture_output=True, text=True, timeout=5
-            )
+            result = self._run_iptables(["--version"])
             return result.returncode == 0
         except (subprocess.SubprocessError, FileNotFoundError):
             logger.warning("iptables not available on this system")
@@ -35,12 +39,13 @@ class IptablesManager:
 
         try:
             # Try to list rules (requires NET_ADMIN capability)
-            result = subprocess.run(
-                ["iptables", "-L", self.CHAIN_NAME, "-n"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
+            result = self._run_iptables(["-L", self.CHAIN_NAME, "-n"])
+            # If chain doesn't exist, we'll get an error, but that's ok
+            # We have permissions if we can run iptables at all
+            return True
+        except subprocess.SubprocessError as e:
+            logger.warning(f"No permissions to manage iptables: {e}")
+            return False
             # If chain doesn't exist, we'll get an error, but that's ok
             # We have permissions if we can run iptables at all
             return True

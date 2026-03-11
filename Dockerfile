@@ -23,7 +23,9 @@ RUN useradd -m -u 1000 appuser
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     iptables \
-    && rm -rf /var/lib/apt/lists/*
+    sudo \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo 'appuser ALL=(ALL) NOPASSWD: /usr/sbin/iptables' >> /etc/sudoers
 
 # Copy virtual environment from builder
 COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
