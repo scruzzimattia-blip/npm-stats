@@ -40,7 +40,7 @@ def sync_logs(since: Optional[datetime] = None) -> int:
     # Check for blocking if enabled
     blocked_ips = {}
     if app_config.enable_blocking:
-        blocker = get_blocker()
+        blocker = get_blocker(use_firewall=app_config.use_firewall)
         blocked_count = 0
 
         for row in rows:
