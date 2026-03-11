@@ -44,6 +44,23 @@ class AppConfig:
     auth_username: str = field(default_factory=lambda: os.getenv("AUTH_USERNAME", "admin"))
     auth_password: str = field(default_factory=lambda: os.getenv("AUTH_PASSWORD", ""))
     allowed_networks: List[str] = field(default_factory=lambda: os.getenv("ALLOWED_NETWORKS", "127.0.0.1/32").split(","))
+    # Blocking configuration
+    enable_blocking: bool = field(default_factory=lambda: os.getenv("ENABLE_BLOCKING", "true").lower() == "true")
+    block_duration: int = field(default_factory=lambda: int(os.getenv("BLOCK_DURATION", "3600")))  # 1 hour
+    max_404_errors: int = field(default_factory=lambda: int(os.getenv("MAX_404_ERRORS", "20")))  # per 5 minutes
+    max_403_errors: int = field(default_factory=lambda: int(os.getenv("MAX_403_ERRORS", "10")))  # per 5 minutes
+    max_5xx_errors: int = field(default_factory=lambda: int(os.getenv("MAX_5XX_ERRORS", "50")))  # per 5 minutes
+    max_failed_requests: int = field(default_factory=lambda: int(os.getenv("MAX_FAILED_REQUESTS", "100")))  # per 5 minutes
+    suspicious_paths: List[str] = field(
+        default_factory=lambda: [
+            p.strip()
+            for p in os.getenv(
+                "SUSPICIOUS_PATHS",
+                "/wp-admin,/wp-login.php,/phpmyadmin,/admin,/login,.env,.git,/config.php,/backup,/sql",
+            ).split(",")
+            if p.strip()
+        ]
+    )
 
 
 # Private IP networks to filter out
