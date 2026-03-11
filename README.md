@@ -162,18 +162,96 @@ Im Dashboard den "CSV Export" Button verwenden.
 
 ## 🔥 Host-basiertes Firewall-Blocking
 
-### Installation
+### Schnellstart (Ein-Klick-Installation)
 
 ```bash
-# 1. Install-Script ausführen
+# Auf dem HOST-System ausführen
 cd ~/npm-stats
 sudo ./scripts/install-iptables.sh
 
-# 2. Datenbank-Zugangsdaten eingeben
-# (wird automatisch abgefragt)
+# Das war's! Das Script macht alles automatisch:
+# ✅ Installiert Sync-Script
+# ✅ Verbindet zur Datenbank
+# ✅ Installiert Systemd Service
+# ✅ Startet automatische Synchronisation (jede Minute)
+```
 
-# 3. Testen
-sudo iptables -L NPM_MONITOR -n
+### Dashboard-Integration
+
+Das Blocking-Dashboard ist im Web-UI integriert:
+
+1. **Dashboard öffnen**: http://localhost:8501
+2. **Tab "🚫 Blocked IPs"** anklicken
+3. **Geblockte IPs** werden mit Grund und Zeitstempel angezeigt
+4. **Manuelles Entsperren**: IPs auswählen und "Unblock Selected IPs" klicken
+
+### Automatische Prozesse
+
+| Komponente | Intervall | Beschreibung |
+|------------|-----------|--------------|
+| **Log-Sync** | 60s | Neue Logs einlesen |
+| **Angriffserkennung** | Echtzeit | Während Log-Sync |
+| **iptables-Sync** | 60s | Host-Firewall aktualisieren |
+| **Daten-Cleanup** | 86400s | Alte Blocks entfernen |
+
+### Workflow
+
+```
+Angriff erkannt (NPM Container)
+        ↓
+Block in Datenbank speichern
+        ↓
+Host-Script liest DB (jede Minute)
+        ↓
+iptables DROP-Regel erstellen
+        ↓
+Traffic wird GEDROPPT (Host-Level)
+        ↓
+Dashboard zeigt Block an
+```
+
+### Status prüfen
+
+```bash
+# Service-Status
+sudo systemctl status npm-monitor-iptables.timer
+
+# Geblockte IPs in iptables
+sudo iptables -L NPM_MONITOR -n -v
+
+# In der Datenbank
+docker compose exec npm-monitor python3 -c "
+from src.database import get_blocked_ips
+ips = get_blocked_ips(active_only=True)
+print(f'{len(ips)} IPs currently blocked')
+for ip, reason, blocked_at, block_until, is_manual in ips[:5]:
+    print(f'  {ip}: {reason}')
+"
+
+# Logs
+sudo journalctl -u npm-monitor-iptables -f
+```
+
+### Manuelle IP-Blockierung
+
+```bash
+# Über Dashboard
+# 1. Tab "🚫 Blocked IPs"
+# 2. IPs werden automatisch angezeigt
+# 3. Zum Entsperren: Checkbox auswählen → "Unblock Selected IPs"
+
+# Über Datenbank
+docker compose exec npm-monitor python3 -c "
+from src.database import add_blocked_ip
+from datetime import datetime, timedelta
+
+# IP für 1 Stunde blockieren
+add_blocked_ip('192.168.1.100', 'Manual block', datetime.now() + timedelta(hours=1))
+print('IP blocked')
+"
+
+# Über Host-iptables
+sudo iptables -A NPM_MONITOR -s 192.168.1.100 -j DROP -m comment --comment "manual"
 ```
 
 ### Automatische Installation
