@@ -151,6 +151,21 @@ def init_database() -> bool:
                     """)
 
                 logger.info("Database schema initialized successfully")
+
+                # Create blocklist table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS blocklist (
+                        id SERIAL PRIMARY KEY,
+                        ip_address TEXT NOT NULL UNIQUE,
+                        reason TEXT NOT NULL,
+                        blocked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        block_until TIMESTAMPTZ NOT NULL,
+                        is_manual BOOLEAN DEFAULT FALSE,
+                        unblocked_at TIMESTAMPTZ,
+                        INDEX idx_blocklist_ip (ip_address),
+                        INDEX idx_blocklist_until (block_until)
+                    );
+                """)
                 return True
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
@@ -316,3 +331,96 @@ def load_traffic_df(
         df["time"] = pd.to_datetime(df["time"])
 
     return df
+
+
+# Blocklist operations
+def add_blocked_ip(
+    ip_address: str, reason: str, block_until: datetime, is_manual: bool = False
+) -> bool:
+    """Add an IP to the blocklist."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO blocklist (ip_address, reason, block_until, is_manual)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (ip_address)
+                DO UPDATE SET
+                    reason = EXCLUDED.reason,
+                    block_until = EXCLUDED.block_until,
+                    blocked_at = NOW(),
+                    unblocked_at = NULL
+                """,
+                (ip_address, reason, block_until, is_manual),
+            )
+            return True
+
+
+def remove_blocked_ip(ip_address: str) -> bool:
+    """Remove an IP from the blocklist (mark as unblocked)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE blocklist
+                SET unblocked_at = NOW()
+                WHERE ip_address = %s AND unblocked_at IS NULL
+                """,
+                (ip_address,),
+            )
+            return cur.rowcount > 0
+
+
+def get_blocked_ips(active_only: bool = True) -> List[Tuple]:
+    """Get blocked IPs from database."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            if active_only:
+                cur.execute(
+                    """
+                    SELECT ip_address, reason, blocked_at, block_until, is_manual
+                    FROM blocklist
+                    WHERE unblocked_at IS NULL AND block_until > NOW()
+                    ORDER BY blocked_at DESC
+                    """
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT ip_address, reason, blocked_at, block_until, is_manual
+                    FROM blocklist
+                    ORDER BY blocked_at DESC
+                    """
+                )
+            return cur.fetchall()
+
+
+def is_ip_blocked(ip_address: str) -> bool:
+    """Check if an IP is currently blocked."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 1 FROM blocklist
+                WHERE ip_address = %s
+                AND unblocked_at IS NULL
+                AND block_until > NOW()
+                """,
+                (ip_address,),
+            )
+            return cur.fetchone() is not None
+
+
+def cleanup_expired_blocks() -> int:
+    """Remove expired blocks from database."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE blocklist
+                SET unblocked_at = NOW()
+                WHERE unblocked_at IS NULL
+                AND block_until <= NOW()
+                """
+            )
+            return cur.rowcount
