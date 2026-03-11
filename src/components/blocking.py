@@ -87,28 +87,40 @@ def render_blocked_ips():
             max_selections=10,
         )
 
-        if st.button("Unblock Selected IPs", type="secondary"):
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            unblock_button = st.button("Unblock Selected IPs", type="secondary")
+        with col2:
+            refresh_button = st.button("🔄 Refresh", type="primary")
+
+        if refresh_button:
+            _get_cached_blocked_ips.clear()
+            st.rerun()
+
+        if unblock_button:
             if not selected_ips:
                 st.warning("Please select IPs to unblock")
             else:
-                unblocked_count = 0
-                for ip in selected_ips:
-                    try:
-                        # Remove from database
-                        if remove_blocked_ip(ip):
-                            # Remove from memory
-                            blocker.unblock_ip(ip)
-                            unblocked_count += 1
-                            logger.info(f"Manually unblocked IP: {ip}")
-                    except Exception as e:
-                        logger.error(f"Error unblocking IP {ip}: {e}")
-                        st.error(f"Failed to unblock {ip}")
+                with st.spinner("Unblocking IPs..."):
+                    unblocked_count = 0
+                    for ip in selected_ips:
+                        try:
+                            # Remove from database
+                            if remove_blocked_ip(ip):
+                                # Remove from memory
+                                blocker.unblock_ip(ip)
+                                unblocked_count += 1
+                                logger.info(f"Manually unblocked IP: {ip}")
+                        except Exception as e:
+                            logger.error(f"Error unblocking IP {ip}: {e}")
+                            st.error(f"Failed to unblock {ip}")
 
-                if unblocked_count > 0:
-                    # Clear cache
-                    _get_cached_blocked_ips.clear()
-                    st.success(f"Unblocked {unblocked_count} IP(s)")
-                    st.rerun()
+                    if unblocked_count > 0:
+                        # Clear cache
+                        _get_cached_blocked_ips.clear()
+                        st.success(f"Unblocked {unblocked_count} IP(s)")
+                        # Use session state to force refresh instead of rerun
+                        st.session_state.unblock_success = True
 
     except Exception as e:
         logger.error(f"Error loading blocked IPs: {e}")
