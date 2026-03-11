@@ -161,11 +161,18 @@ def init_database() -> bool:
                         blocked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         block_until TIMESTAMPTZ NOT NULL,
                         is_manual BOOLEAN DEFAULT FALSE,
-                        unblocked_at TIMESTAMPTZ,
-                        INDEX idx_blocklist_ip (ip_address),
-                        INDEX idx_blocklist_until (block_until)
+                        unblocked_at TIMESTAMPTZ
                     );
                 """)
+
+                # Create indexes for blocklist table
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_blocklist_ip ON blocklist (ip_address);
+                """)
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_blocklist_until ON blocklist (block_until);
+                """)
+
                 return True
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
