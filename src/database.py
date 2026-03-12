@@ -369,7 +369,7 @@ def get_traffic_count(
 
     if hosts:
         conditions.append("host = ANY(%s)")
-        params.append(hosts)
+        params.append(list(hosts))
     if start_date:
         conditions.append("time >= %s")
         params.append(start_date)
@@ -399,7 +399,7 @@ def get_hourly_traffic_summary(
 
     if hosts:
         conditions.append("host = ANY(%s)")
-        params.append(hosts)
+        params.append(list(hosts))
     if start_date:
         conditions.append("time >= %s")
         params.append(start_date)
@@ -442,7 +442,7 @@ def get_top_ips_summary(
 
     if hosts:
         conditions.append("host = ANY(%s)")
-        params.append(hosts)
+        params.append(list(hosts))
     if start_date:
         conditions.append("time >= %s")
         params.append(start_date)
