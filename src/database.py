@@ -170,6 +170,15 @@ def init_database() -> bool:
                     );
                 """)
 
+                # Create settings table for dynamic configuration
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS app_settings (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL,
+                        updated_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+
                 logger.info("Database schema initialized successfully")
 
                 # Create blocklist table
@@ -636,3 +645,29 @@ def get_database_info() -> Dict[str, Any]:
 def health_check() -> bool:
     """Check if database is healthy."""
     return is_database_available()
+
+
+# Settings operations
+def get_all_settings() -> Dict[str, str]:
+    """Get all settings from the database."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT key, value FROM app_settings;")
+            return {row[0]: row[1] for row in cur.fetchall()}
+
+
+def update_setting(key: str, value: Any) -> bool:
+    """Update or insert a setting in the database."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO app_settings (key, value, updated_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (key) DO UPDATE
+                SET value = EXCLUDED.value,
+                    updated_at = NOW();
+                """,
+                (key, str(value)),
+            )
+            return True
