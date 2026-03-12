@@ -448,7 +448,7 @@ def get_database_info() -> Dict[str, Any]:
         with conn.cursor() as cur:
             # Row counts
             cur.execute("SELECT COUNT(*) FROM traffic;")
-            info["traffic_count"] = cur.fetchone()[0]
+            info["total_rows"] = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM blocklist WHERE unblocked_at IS NULL AND block_until > NOW();")
             info["blocked_count"] = cur.fetchone()[0]
             # Database size
