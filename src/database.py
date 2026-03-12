@@ -695,6 +695,65 @@ def get_database_info() -> Dict[str, Any]:
     return info
 
 
+def get_traffic_spike_metrics(
+    hosts: Optional[List[str]] = None,
+    recent_minutes: int = 5,
+    baseline_minutes: int = 60
+) -> Dict[str, Any]:
+    """
+    Compare recent traffic with a baseline to detect spikes.
+    
+    Returns:
+        Dict with current_rate, baseline_rate, and is_spike boolean.
+    """
+    now = datetime.now(timezone.utc)
+    recent_start = now - timedelta(minutes=recent_minutes)
+    baseline_start = now - timedelta(minutes=baseline_minutes)
+    
+    conditions = []
+    params: List[Any] = []
+    
+    if hosts:
+        conditions.append("host = ANY(%s)")
+        params.append(list(hosts))
+        
+    where_clause = " AND ".join(conditions) + " AND " if conditions else ""
+    
+    query = f"""
+        SELECT
+            SUM(CASE WHEN time >= %s THEN 1 ELSE 0 END) as recent_count,
+            COUNT(*) as baseline_count
+        FROM traffic
+        WHERE {where_clause} time >= %s;
+    """
+    
+    # We need recent_start twice and baseline_start once
+    query_params = params + [recent_start, baseline_start]
+    
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            cur.execute(query, query_params)
+            res = cur.fetchone()
+            
+            recent_count = res["recent_count"] or 0
+            baseline_count = res["baseline_count"] or 0
+            
+            # Calculate rates per minute
+            current_rate = recent_count / recent_minutes
+            # Baseline rate (excluding the recent window to be more accurate)
+            baseline_rate = (baseline_count - recent_count) / max(1, (baseline_minutes - recent_minutes))
+            
+            return {
+                "current_rate": round(current_rate, 2),
+                "baseline_rate": round(baseline_rate, 2),
+                "recent_count": recent_count,
+                "is_spike": (
+                    recent_count >= app_config.spike_min_requests and 
+                    current_rate > (baseline_rate * app_config.spike_threshold_factor)
+                ) if app_config.enable_anomaly_detection else False
+            }
+
+
 def health_check() -> bool:
     """Check if database is healthy."""
     return is_database_available()
