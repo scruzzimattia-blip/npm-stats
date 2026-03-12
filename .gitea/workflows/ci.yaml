@@ -15,15 +15,24 @@ jobs:
           
       - name: Build and Push UI
         run: |
-          docker build -t 192.168.1.41:3000/${{ github.repository_owner }}/${{ github.event.repository.name }}/npm-ui:latest .
-          docker push 192.168.1.41:3000/${{ github.repository_owner }}/${{ github.event.repository.name }}/npm-ui:latest
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          TAG="192.168.1.41:3000/${REPO_OWNER}/${REPO_NAME}/npm-ui:latest"
+          docker build -t $TAG .
+          docker push $TAG
           
       - name: Build and Push Worker
         run: |
-          docker build -t 192.168.1.41:3000/${{ github.repository_owner }}/${{ github.event.repository.name }}/npm-worker:latest .
-          docker push 192.168.1.41:3000/${{ github.repository_owner }}/${{ github.event.repository.name }}/npm-worker:latest
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          TAG="192.168.1.41:3000/${REPO_OWNER}/${REPO_NAME}/npm-worker:latest"
+          docker build -t $TAG .
+          docker push $TAG
           
       - name: Build and Push AI
         run: |
-          docker build -t 192.168.1.41:3000/${{ github.repository_owner }}/${{ github.event.repository.name }}/npm-ai:latest .
-          docker push 192.168.1.41:3000/${{ github.repository_owner }}/${{ github.event.repository.name }}/npm-ai:latest
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          TAG="192.168.1.41:3000/${REPO_OWNER}/${REPO_NAME}/npm-ai:latest"
+          docker build -t $TAG .
+          docker push $TAG
