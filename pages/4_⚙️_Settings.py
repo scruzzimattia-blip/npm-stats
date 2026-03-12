@@ -73,6 +73,21 @@ def main():
                 update_setting("enable_blocking", enable_blocking)
                 st.success("Sicherheitseinstellungen gespeichert!")
                 st.rerun()
+        
+        st.divider()
+        st.subheader("🌐 Cloudflare Edge Blocking")
+        st.info("Blockiert IPs direkt bei Cloudflare, bevor sie deinen Server erreichen.")
+        with st.form("cloudflare_settings"):
+            enable_cf = st.checkbox("Cloudflare Integration Aktivieren", value=app_config.enable_cloudflare)
+            cf_token = st.text_input("Cloudflare API Token", value=app_config.cloudflare_api_token, type="password", help="Berechtigung: Zone.Firewall Services (Edit)")
+            cf_zone = st.text_input("Cloudflare Zone ID", value=app_config.cloudflare_zone_id)
+            
+            if st.form_submit_button("Cloudflare Speichern"):
+                update_setting("enable_cloudflare", enable_cf)
+                update_setting("cloudflare_api_token", cf_token)
+                update_setting("cloudflare_zone_id", cf_zone)
+                st.success("Cloudflare-Einstellungen gespeichert!")
+                st.rerun()
 
     with tab_notify:
         st.subheader("Alerting Konfiguration")
