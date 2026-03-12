@@ -1,5 +1,6 @@
 name: CI
 on: [push]
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -21,12 +22,29 @@ jobs:
         run: |
           pytest tests/
           
-  docker-check:
+  build-and-push:
+    needs: test
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
         
-      - name: Test Docker Build
+      - name: Login to Gitea Registry
         run: |
-          docker compose build --no-cache
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login 192.168.1.41:3000 --username "${{ github.actor }}" --password-stdin
+          
+      - name: Build and Push UI
+        run: |
+          docker build -t 192.168.1.41:3000/${{ github.repository_owner }}/${{ github.event.repository.name }}/npm-ui:latest .
+          docker push 192.168.1.41:3000/${{ github.repository_owner }}/${{ github.event.repository.name }}/npm-ui:latest
+          
+      - name: Build and Push Worker
+        run: |
+          docker build -t 192.168.1.41:3000/${{ github.repository_owner }}/${{ github.event.repository.name }}/npm-worker:latest .
+          docker push 192.168.1.41:3000/${{ github.repository_owner }}/${{ github.event.repository.name }}/npm-worker:latest
+          
+      - name: Build and Push AI
+        run: |
+          docker build -t 192.168.1.41:3000/${{ github.repository_owner }}/${{ github.event.repository.name }}/npm-ai:latest .
+          docker push 192.168.1.41:3000/${{ github.repository_owner }}/${{ github.event.repository.name }}/npm-ai:latest
