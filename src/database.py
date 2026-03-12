@@ -443,17 +443,36 @@ def get_distinct_hosts() -> List[str]:
 
 def get_database_info() -> Dict[str, Any]:
     """Get database statistics and information."""
-    info = {}
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            # Row counts
-            cur.execute("SELECT COUNT(*) FROM traffic;")
-            info["total_rows"] = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM blocklist WHERE unblocked_at IS NULL AND block_until > NOW();")
-            info["blocked_count"] = cur.fetchone()[0]
-            # Database size
-            cur.execute("SELECT pg_size_pretty(pg_database_size(current_database()));")
-            info["database_size"] = cur.fetchone()[0]
+    info = {
+        "total_rows": 0,
+        "blocked_count": 0,
+        "table_size": "0 B",
+        "oldest_record": None,
+        "newest_record": None,
+    }
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Row counts
+                cur.execute("SELECT COUNT(*) FROM traffic;")
+                info["total_rows"] = cur.fetchone()[0]
+                
+                cur.execute("SELECT COUNT(*) FROM blocklist WHERE unblocked_at IS NULL AND block_until > NOW();")
+                info["blocked_count"] = cur.fetchone()[0]
+                
+                # Table size (traffic only, as it's the main data)
+                cur.execute("SELECT pg_size_pretty(pg_total_relation_size('traffic'));")
+                info["table_size"] = cur.fetchone()[0]
+                
+                # Timestamps
+                cur.execute("SELECT MIN(time), MAX(time) FROM traffic;")
+                res = cur.fetchone()
+                if res and res[0]:
+                    info["oldest_record"] = res[0]
+                    info["newest_record"] = res[1]
+    except Exception as e:
+        logger.error(f"Error getting database info: {e}")
+        
     return info
 
 
