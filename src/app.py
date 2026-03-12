@@ -125,10 +125,6 @@ def main():
         initial_sidebar_state="expanded",
     )
 
-    # Check authentication
-    if not check_auth():
-        return
-
     # Initialize GeoIP
     init_geoip()
 

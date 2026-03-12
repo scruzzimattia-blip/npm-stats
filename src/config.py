@@ -40,7 +40,7 @@ class AppConfig:
     retention_days: int = field(default_factory=lambda: int(os.getenv("RETENTION_DAYS", "30")))
     enable_geoip: bool = field(default_factory=lambda: os.getenv("ENABLE_GEOIP", "false").lower() == "true")
     geoip_db_path: str = field(default_factory=lambda: os.getenv("GEOIP_DB_PATH", "/geoip/GeoLite2-City.mmdb"))
-    enable_auth: bool = field(default_factory=lambda: os.getenv("ENABLE_AUTH", "true").lower() == "true")
+    enable_auth: bool = field(default_factory=lambda: os.getenv("ENABLE_AUTH", "false").lower() == "true")
     auth_username: str = field(default_factory=lambda: os.getenv("AUTH_USERNAME", "admin"))
     auth_password: str = field(default_factory=lambda: os.getenv("AUTH_PASSWORD", ""))
     allowed_networks: List[str] = field(default_factory=lambda: os.getenv("ALLOWED_NETWORKS", "127.0.0.1/32").split(","))
