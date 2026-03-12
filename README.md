@@ -1,97 +1,81 @@
 # NPM Monitor 🌐
 
-Ein leistungsstarkes, modernes Traffic-Monitoring-Dashboard für den **Nginx Proxy Manager (NPM)** mit Fokus auf Performance, Sicherheit und geografische Analyse.
+Ein leistungsstarkes, modernes Multi-Container Monitoring-Dashboard für den **Nginx Proxy Manager (NPM)** mit KI-Unterstützung, CrowdSec-Integration und geografischer Analyse.
 
-![Version](https://img.shields.io/badge/version-0.2.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-green)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
-![Streamlit](https://img.shields.io/badge/frontend-Streamlit-red)
-![PostgreSQL](https://img.shields.io/badge/database-PostgreSQL-blue)
+![Architecture](https://img.shields.io/badge/architecture-Multi--Container-orange)
+![AI](https://img.shields.io/badge/AI-OpenRouter-purple)
 
 ## 🚀 Kern-Features
 
-- **📊 Multi-Page Dashboard**: Klare Trennung zwischen Übersicht, detaillierter IP-Analyse, Sicherheitsverwaltung und Systemeinstellungen.
-- **🚫 Intelligentes Auto-Blocking**: Erkennt Angriffsmuster (404-Flooding, verdächtige Pfade) und sperrt IPs automatisch.
-  - **Shared State**: Nutzt die Datenbank zur Synchronisation der Zähler zwischen Hintergrund-Worker und Dashboard.
-  - **Host-Integration**: Synchronisiert DB-Sperren direkt mit der Host-Firewall (`iptables`) für maximale Effizienz.
-- **🗺️ Geo-Visualisierung**: Interaktive 3D-Heatmap und Cluster-Karte zur Identifizierung globaler Traffic-Quellen.
-- **🔔 Echtzeit-Alerting**: Sofortige Benachrichtigungen via **Discord**, **Slack** oder **Telegram** Webhooks bei IP-Sperrungen.
-- **📄 PDF-Reporting**: Generiere professionelle Traffic-Berichte mit einem Klick.
-- **⚡ High Performance**: Optimiert für große Datenmengen durch PostgreSQL-Indizes, serverseitige Aggregation und intelligentes Caching.
+- **🏗️ Multi-Container Architektur**: Getrennte Services für UI (`npm-ui`), Hintergrund-Verarbeitung (`npm-worker`) und KI-Analyse (`npm-ai`) für maximale Performance.
+- **🤖 KI-Verhaltensanalyse**: Integrierte LLM-Analyse via **OpenRouter** (z.B. Gemini, DeepSeek). Erkennt automatisch böswillige Absichten hinter Log-Mustern.
+- **🛡️ CrowdSec Integration**: Abgleich von IPs mit der globalen CrowdSec-Community-Datenbank für proaktiven Schutz.
+- **🚫 Intelligentes Auto-Blocking**: Erkennt 404-Flooding, verdächtige Pfade und Anomalien. Sperrt IPs lokal (`iptables`) oder an der **Cloudflare Edge**.
+- **📊 Echtzeit-Monitoring**: Live-Log-Viewer (5s Refresh), NPM-Health-Checks und Anomalie-Warnungen bei Traffic-Spikes.
+- **🗺️ Geo-Visualisierung**: Interaktive Karten zur Identifizierung globaler Traffic-Quellen inkl. detaillierter Bot-Kategorisierung (Security Scanner, Suchmaschinen etc.).
+- **🔔 Multi-Channel Alerting**: Benachrichtigungen via **Telegram**, **Discord** oder **Slack**.
 
 ## 🛠️ Installation & Setup
 
 1. **Konfiguration vorbereiten**:
    ```bash
    cp .env.example .env
-   # WICHTIG: Passwörter und WEBHOOK_URL anpassen!
+   # WICHTIG: Passwörter, API-Keys (OpenRouter, Cloudflare) und Telegram-Daten anpassen!
    nano .env
    ```
 
-2. **Container starten**:
+2. **Stack starten**:
    ```bash
    docker compose up -d --build
    ```
 
-3. **Host-Firewall Blocking (Optional, empfohlen)**:
-   ```bash
-   # Auf dem HOST-System ausführen, um DB-Sperren mit iptables zu verbinden
-   cd ~/npm-stats
-   sudo ./scripts/install-iptables.sh
-   ```
+3. **Dashboard öffnen**: http://localhost:8501
 
-4. **Dashboard öffnen**: http://localhost:8501
+## 📦 Service-Struktur
 
-## ⚙️ Konfiguration (.env)
+| Service | Aufgabe |
+|---------|---------|
+| `npm-ui` | Streamlit Dashboard & Benutzeroberfläche |
+| `npm-worker` | Log-Parsing, DB-Synchronisation & Blocking-Logik |
+| `npm-ai` | Hintergrund-KI-Analyse für blockierte IPs |
+| `crowdsec` | Lokale CrowdSec API & Log-Security-Engine |
+| `shared-postgres` | Zentrale Datenbank für alle Metriken & Berichte |
+| `geoip-updater` | Automatischer Update der MaxMind Datenbank |
 
-| Variable | Standard | Beschreibung |
-|----------|----------|--------------|
-| `WEBHOOK_URL` | - | Webhook-URL für Discord/Slack Benachrichtigungen |
-| `NOTIFY_ON_BLOCK` | `true` | Benachrichtigung bei automatischer Sperre senden |
-| `ENABLE_GEOIP` | `true` | Geografische Erkennung aktivieren |
-| `RETENTION_DAYS` | `30` | Aufbewahrungsdauer der Logs in Tagen |
-| `SYNC_INTERVAL` | `60` | Log-Synchronisation alle X Sekunden |
-| `BLOCK_DURATION` | `3600` | Standard-Sperrdauer in Sekunden (1 Std) |
+## ⚙️ Wichtige Konfigurationen (.env)
 
-## 🛡️ Sicherheit & Blocking
+| Variable | Beschreibung |
+|----------|--------------|
+| `OPENROUTER_API_KEY` | Key für die KI-Verhaltensanalyse |
+| `ENABLE_AI_AUTO_ANALYSIS` | Automatische KI-Prüfung bei jeder Sperre |
+| `CLOUDFLARE_API_TOKEN` | Für Blocking auf Cloudflare Edge Ebene |
+| `TELEGRAM_BOT_TOKEN` | Bot-Token für mobile Benachrichtigungen |
+| `ENABLE_CROWDSEC` | Aktiviert die IP-Reputationsprüfung |
 
-NPM Monitor bietet ein mehrstufiges Sicherheitskonzept:
+## 🛡️ Sicherheit & Analyse
 
-1. **Analyse**: Der Hintergrund-Worker scannt kontinuierlich NPM-Logs auf Anomalien.
-2. **Detection**: Überschreitet eine IP Schwellwerte (z.B. zu viele 404s oder Zugriff auf `/wp-admin`), wird sie in der Datenbank markiert.
-3. **Action**: 
-   - Die IP wird sofort in der App gesperrt.
-   - Eine Benachrichtigung wird an den konfigurierten Webhook gesendet.
-   - Das Host-Script wendet die Sperre auf Systemebene (`iptables DROP`) an.
-
-## 📊 Dashboard-Struktur
-
-- **Übersicht**: Echtzeit-Metriken, Traffic-Verlauf und Status-Verteilung.
-- **IP-Analyse**: Wer besucht deine Seiten? Inklusive Weltkarte und Browser-Statistiken.
-- **Blocking**: Liste aller aktiven Sperren, Gründe und manuelle Verwaltung (Entsperren/Whitelisting).
-- **Einstellungen**: System-Status, Datenbank-Größe und Konfigurationsübersicht.
-
-## 📈 Performance-Features
-
-- **SQL-Aggregation**: Metriken werden direkt in der DB berechnet (schnell auch bei Millionen Einträgen).
-- **Verbund-Indizes**: Optimierte Datenbank-Indizes für blitzschnelles Filtern nach Domain und Zeit.
-- **Lazy Loading**: Logs werden paginiert geladen, um das UI flüssig zu halten.
-- **Parallel Parsing**: Log-Dateien werden CPU-optimiert parallel eingelesen.
+NPM Monitor bietet nun eine vierstufige Verteidigung:
+1. **Regelbasiert**: Schnelle Erkennung von Standardangriffen (Worker).
+2. **Community**: Schutz durch globale Blocklisten (CrowdSec).
+3. **KI-Unterstützt**: Tiefenanalyse von komplexen Verhaltensmustern (AI-Analyzer).
+4. **Edge-Defense**: Blockiert Angriffe bevor sie den Server erreichen (Cloudflare).
 
 ## 📂 Projektstruktur
 
 ```
 npm-monitor/
-├── pages/              # Streamlit Multi-Page Dateien
+├── pages/              # Streamlit Multi-Page (Overview, IP-Analysis, etc.)
 ├── src/
-│   ├── components/     # UI-Komponenten (Maps, Charts, Tables)
-│   ├── utils/          # PDF-Export und Hilfsfunktionen
-│   ├── blocking.py     # Angriffserkennung (Shared State)
-│   ├── database.py     # Datenbank-Kern & Optimierungen
-│   ├── notifications.py # Webhook-Integration
-│   └── sync.py         # Log-Parser Integration
-├── scripts/            # Host-Level Firewall Scripts
-├── docker-compose.yml
-└── pyproject.toml
+│   ├── ai_analyzer.py  # KI-Logik & OpenRouter Integration
+│   ├── crowdsec.py     # CrowdSec LAPI Schnittstelle
+│   ├── cloudflare_waf.py # Cloudflare API Integration
+│   ├── blocking.py     # Zentrale Blocking-Logik
+│   └── database.py     # DB-Kern mit AI-Bericht-Speicherung
+├── entrypoint-*.sh     # Spezialisierte Start-Skripte für Services
+├── docker-compose.yml  # Multi-Container Definition
+└── pyproject.toml      # Zentrale Abhängigkeiten (uv)
 ```
 
 ## ⚖️ Lizenz
