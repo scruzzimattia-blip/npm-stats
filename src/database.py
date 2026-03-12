@@ -293,6 +293,14 @@ def cleanup_old_trackers(max_age_minutes: int = 60):
             )
 
 
+def get_tracked_ip_count() -> int:
+    """Get the number of IPs currently being tracked for suspicious activity."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM request_tracker;")
+            return cur.fetchone()[0]
+
+
 def cleanup_old_data(days: Optional[int] = None) -> int:
     """Delete data older than specified days. Returns number of deleted rows."""
     retention_days = days if days is not None else app_config.retention_days
