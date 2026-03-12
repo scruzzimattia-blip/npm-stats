@@ -42,6 +42,19 @@ class IPBlocker:
                 logger.error(f"Failed to initialize iptables: {e}")
                 self.use_firewall = False
 
+        # Initialize Cloudflare manager if enabled
+        self._cloudflare = None
+        if app_config.enable_cloudflare:
+            try:
+                from .cloudflare_waf import get_cloudflare_manager
+                self._cloudflare = get_cloudflare_manager()
+                if self._cloudflare:
+                    logger.info("Cloudflare-level blocking enabled")
+                else:
+                    logger.warning("Cloudflare enabled but manager could not be initialized (check API credentials)")
+            except Exception as e:
+                logger.error(f"Failed to initialize Cloudflare: {e}")
+
     def check_request(
         self, ip: str, status: int, path: str, host: str = ""
     ) -> Optional[str]:
@@ -132,6 +145,13 @@ class IPBlocker:
             except Exception as e:
                 logger.error(f"Failed to block IP {ip} at firewall level: {e}")
 
+        # Block at Cloudflare level if enabled
+        if self._cloudflare:
+            try:
+                self._cloudflare.block_ip(ip, reason)
+            except Exception as e:
+                logger.error(f"Failed to block IP {ip} at Cloudflare level: {e}")
+
         # Reset counters in DB after blocking
         try:
             reset_request_counters(ip)
@@ -152,7 +172,12 @@ class IPBlocker:
 
         # Check firewall-level block if enabled
         if self.use_firewall and self._iptables:
-            return self._iptables.is_blocked(ip)
+            if self._iptables.is_blocked(ip):
+                return True
+
+        # Check Cloudflare-level block if enabled
+        if self._cloudflare:
+            return self._cloudflare.is_blocked(ip)
 
         return False
 
@@ -166,10 +191,17 @@ class IPBlocker:
 
         if self.use_firewall and self._iptables:
             try:
-                self._iptables.unblock_ip(ip)
-                unblocked = True
+                if self._iptables.unblock_ip(ip):
+                    unblocked = True
             except Exception as e:
                 logger.error(f"Failed to unblock IP {ip} at firewall level: {e}")
+
+        if self._cloudflare:
+            try:
+                if self._cloudflare.unblock_ip(ip):
+                    unblocked = True
+            except Exception as e:
+                logger.error(f"Failed to unblock IP {ip} at Cloudflare level: {e}")
 
         if unblocked:
             logger.info(f"IP {ip} has been unblocked")
