@@ -103,6 +103,10 @@ class IPBlocker:
 
     def _block_ip(self, ip: str, reason: str, block_until: datetime):
         """Block an IP address."""
+        # Avoid redundant blocking if already in local cache
+        if ip in self.blocked_ips and self.blocked_ips[ip] >= block_until:
+            return
+
         self.blocked_ips[ip] = block_until
 
         # Block at firewall level if enabled
