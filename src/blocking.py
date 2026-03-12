@@ -8,7 +8,8 @@ from .config import app_config
 from .database import (
     update_request_counters,
     reset_request_counters,
-    cleanup_old_trackers
+    cleanup_old_trackers,
+    get_tracked_ip_count
 )
 from .notifications import send_notification
 
@@ -180,6 +181,7 @@ class IPBlocker:
         return {
             "total_blocked": len(self.get_blocked_ips()),
             "whitelisted": len(self.whitelisted_ips),
+            "tracked_ips": get_tracked_ip_count(),
         }
 
     def cleanup_old_ips(self, max_age_minutes: int = 60):
