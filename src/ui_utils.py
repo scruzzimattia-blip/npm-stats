@@ -12,6 +12,7 @@ from .database import (
     get_database_info,
     get_newest_timestamp,
     health_check,
+    init_database,
     cleanup_old_data,
     load_traffic_df,
     get_traffic_count,
