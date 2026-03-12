@@ -94,42 +94,87 @@ def _get_device_type(ua_lower: str) -> str:
 
 
 def parse_user_agent(ua: str) -> dict[str, str | bool]:
-    """Parse user agent string into components."""
+    """Parse user agent string into components with categorization."""
     ua_lower = ua.lower() if ua else ""
 
     browser = _get_browser(ua_lower)
     os_name = _get_os(ua_lower)
     device = _get_device_type(ua_lower)
 
-    # Detect bot/crawler
-    is_bot = device == "Bot" or any(
-        x in ua_lower
-        for x in [
-            "bot",
-            "crawler",
-            "spider",
-            "scraper",
-            "curl",
-            "wget",
-            "python",
-            "go-http",
-            "java/",
-            "node",
-            "fetch",
-            "preview",
-            "bingpreview",
-            "googlebot",
-            "duckduckbot",
-            "yandex",
-            "baiduspider",
-            "facebookexternalhit",
-            "twitterbot",
-            "slackbot",
-            "telegrambot",
-        ]
-    )
+    # Categories
+    is_bot = False
+    bot_category = "Mensch"
+    
+    # Scanner detection
+    scanners = {
+        "shodan": "Security Scanner (Shodan)",
+        "censys": "Security Scanner (Censys)",
+        "zoomeye": "Security Scanner (ZoomEye)",
+        "zgrab": "Security Scanner (Zgrab)",
+        "nmap": "Security Scanner (Nmap)",
+        "project 25499": "Security Scanner (Project 25499)",
+        "masscan": "Security Scanner (Masscan)",
+        "nikto": "Security Scanner (Nikto)",
+        "acunetix": "Security Scanner (Acunetix)",
+        "sqlmap": "Security Scanner (sqlmap)",
+    }
+    
+    for key, label in scanners.items():
+        if key in ua_lower:
+            is_bot = True
+            bot_category = label
+            break
+            
+    if not is_bot:
+        # Search engines
+        search_engines = {
+            "googlebot": "Suchmaschine (Google)",
+            "bingbot": "Suchmaschine (Bing)",
+            "duckduckbot": "Suchmaschine (DuckDuckGo)",
+            "yandex": "Suchmaschine (Yandex)",
+            "baiduspider": "Suchmaschine (Baidu)",
+            "slurp": "Suchmaschine (Yahoo)",
+        }
+        for key, label in search_engines.items():
+            if key in ua_lower:
+                is_bot = True
+                bot_category = label
+                break
+                
+    if not is_bot:
+        # Social Media & Tools
+        social_bots = {
+            "facebookexternalhit": "Social Media (Facebook)",
+            "twitterbot": "Social Media (Twitter)",
+            "slackbot": "Tool (Slack)",
+            "telegrambot": "Tool (Telegram)",
+            "whatsapp": "Tool (WhatsApp)",
+            "discordbot": "Tool (Discord)",
+            "curl/": "Tool (curl)",
+            "wget": "Tool (wget)",
+            "python-requests": "Tool (Python Requests)",
+            "go-http-client": "Tool (Go)",
+        }
+        for key, label in social_bots.items():
+            if key in ua_lower:
+                is_bot = True
+                bot_category = label
+                break
 
-    return {"browser": browser, "os": os_name, "device": device, "is_bot": is_bot}
+    if not is_bot:
+        # Generic bot patterns
+        generic_patterns = ["bot", "crawler", "spider", "scraper", "node-fetch", "headlesschrome"]
+        if any(x in ua_lower for x in generic_patterns):
+            is_bot = True
+            bot_category = "Generischer Bot"
+
+    return {
+        "browser": browser, 
+        "os": os_name, 
+        "device": device, 
+        "is_bot": is_bot,
+        "bot_category": bot_category
+    }
 
 
 def get_status_category(status: int) -> str:
