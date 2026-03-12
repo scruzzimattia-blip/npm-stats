@@ -10,7 +10,8 @@ from src.ui_utils import (
 from src.components import (
     render_geo_analysis,
     render_referer_analysis,
-    render_user_agent_analysis
+    render_user_agent_analysis,
+    render_geo_summary
 )
 from src.components.maps import render_geo_map
 
@@ -31,15 +32,21 @@ def main():
         hosts=selected_hosts,
         start_date=start_date,
         end_date=end_date,
-        limit=1000
+        limit=5000 # More data for geo analysis
     )
 
-    # Geo Map
-    render_geo_map(df)
+    # Main Row: Map and Geo Table
+    col_map, col_stats = st.columns([2, 1])
+    
+    with col_map:
+        render_geo_map(df)
+    
+    with col_stats:
+        render_geo_summary(df)
     
     st.divider()
     
-    # Other analyses
+    # Analysis Row
     col1, col2 = st.columns(2)
     with col1:
         render_geo_analysis(df)

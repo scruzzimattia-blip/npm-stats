@@ -10,7 +10,7 @@ from .charts import (
     render_user_agent_analysis,
 )
 from .sidebar import render_sidebar
-from .tables import render_metrics, render_request_log, render_top_ips
+from .tables import render_geo_summary, render_metrics, render_request_log, render_top_ips
 
 __all__ = [
     "render_charts",
@@ -25,4 +25,5 @@ __all__ = [
     "render_request_log",
     "render_blocked_ips",
     "render_blocking_config",
+    "render_geo_summary",
 ]
