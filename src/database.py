@@ -328,7 +328,7 @@ def load_traffic_df(
 
     if hosts:
         conditions.append("host = ANY(:hosts)")
-        params["hosts"] = hosts
+        params["hosts"] = list(hosts)
     if start_date:
         conditions.append("time >= :start_date")
         params["start_date"] = start_date
