@@ -67,6 +67,10 @@ class AppConfig:
     enable_cloudflare: bool = field(default_factory=lambda: os.getenv("ENABLE_CLOUDFLARE", "false").lower() == "true")
     cloudflare_api_token: str = field(default_factory=lambda: os.getenv("CLOUDFLARE_API_TOKEN", ""))
     cloudflare_zone_id: str = field(default_factory=lambda: os.getenv("CLOUDFLARE_ZONE_ID", ""))
+    # Anomaly detection
+    enable_anomaly_detection: bool = field(default_factory=lambda: os.getenv("ENABLE_ANOMALY_DETECTION", "true").lower() == "true")
+    spike_threshold_factor: float = field(default_factory=lambda: float(os.getenv("SPIKE_THRESHOLD_FACTOR", "3.0")))
+    spike_min_requests: int = field(default_factory=lambda: int(os.getenv("SPIKE_MIN_REQUESTS", "50")))
     # Notification settings
     webhook_url: str = field(default_factory=lambda: os.getenv("WEBHOOK_URL", ""))
     notify_on_block: bool = field(default_factory=lambda: os.getenv("NOTIFY_ON_BLOCK", "true").lower() == "true")
