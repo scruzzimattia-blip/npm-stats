@@ -55,8 +55,21 @@ def sync_logs() -> int:
 
 
 @st.cache_data(ttl=300)
-def load_traffic_data(**kwargs):
-    return load_traffic_df(**kwargs)
+def load_traffic_data(
+    hosts: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    limit: int = 1000,
+    offset: int = 0,
+):
+    """Cached traffic data loading with explicit parameters for better caching."""
+    return load_traffic_df(
+        hosts=list(hosts) if hosts else None,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        offset=offset
+    )
 
 
 @st.cache_data(ttl=300)
@@ -70,13 +83,31 @@ def _cached_db_info():
 
 
 @st.cache_data(ttl=300)
-def _cached_hourly_summary(**kwargs):
-    return get_hourly_traffic_summary(**kwargs)
+def _cached_hourly_summary(
+    hosts: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+):
+    return get_hourly_traffic_summary(
+        hosts=list(hosts) if hosts else None,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
 
 @st.cache_data(ttl=300)
-def _cached_top_ips(**kwargs):
-    return get_top_ips_summary(**kwargs)
+def _cached_top_ips(
+    hosts: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    limit: int = 100,
+):
+    return get_top_ips_summary(
+        hosts=list(hosts) if hosts else None,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit
+    )
 
 
 def render_common_sidebar():
