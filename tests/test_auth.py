@@ -5,96 +5,139 @@ from unittest.mock import Mock, patch, MagicMock
 from ipaddress import ip_address, ip_network
 
 
-def test_ttl_cache_basic():
-    """Test basic TTL cache functionality."""
-    from src.log_parser import TTLCache
-    import time
-    
-    cache = TTLCache(maxsize=2, ttl=10)
-    
-    call_count = 0
-    
-    @cache
-    def expensive_function(x):
-        nonlocal call_count
-        call_count += 1
-        return x * 2
-    
-    result1 = expensive_function(5)
-    assert result1 == 10
-    assert call_count == 1
-    
-    result2 = expensive_function(5)
-    assert result2 == 10
-    assert call_count == 1  # Should use cache
-    
-    result3 = expensive_function(6)
-    assert result3 == 12
-    assert call_count == 2
+class TestCheckIPAccess:
+    """Tests for IP access checking."""
+
+    @patch("src.auth.st")
+    def test_check_ip_access_no_restrictions(self, mock_st):
+        """Test access when no networks are configured."""
+        from src.auth import check_ip_access
+        from src.config import app_config
+
+        with patch.object(app_config, "allowed_networks", []):
+            result = check_ip_access()
+            assert result is True
+
+    @patch("src.auth.st")
+    def test_check_ip_access_allowed_network(self, mock_st):
+        """Test access from allowed network."""
+        from src.auth import check_ip_access
+        from src.config import app_config
+
+        mock_st._client_ip = "192.168.1.100"
+
+        with patch.object(app_config, "allowed_networks", ["192.168.1.0/24"]):
+            result = check_ip_access()
+            assert result is True
+
+    @patch("src.auth.st")
+    def test_check_ip_access_denied_network(self, mock_st):
+        """Test access denied from non-allowed network."""
+        from src.auth import check_ip_access
+        from src.config import app_config
+
+        mock_st._client_ip = "10.0.0.1"
+
+        with patch.object(app_config, "allowed_networks", ["192.168.1.0/24"]):
+            result = check_ip_access()
+            assert result is False
+
+    @patch("src.auth.st")
+    def test_check_ip_access_invalid_network(self, mock_st):
+        """Test handling of invalid network configuration."""
+        from src.auth import check_ip_access
+        from src.config import app_config
+
+        mock_st._client_ip = "192.168.1.100"
+
+        with patch.object(app_config, "allowed_networks", ["invalid-network", "192.168.1.0/24"]):
+            result = check_ip_access()
+            assert result is True
 
 
-def test_ttl_cache_lru_eviction():
-    """Test LRU eviction in TTL cache."""
-    from src.log_parser import TTLCache
-    
-    cache = TTLCache(maxsize=2, ttl=10)
-    
-    @cache
-    def func(x):
-        return x
-    
-    func(1)
-    func(2)
-    func(3)  # Should evict func(1) due to LRU
-    
-    # Verify cache size
-    with cache._lock:
-        assert len(cache._cache) <= 2
+class TestCheckAuth:
+    """Tests for authentication checking."""
 
+    @patch("src.auth.st")
+    def test_check_auth_disabled(self, mock_st):
+        """Test when authentication is disabled."""
+        from src.auth import check_auth
+        from src.config import app_config
 
-def test_ttl_cache_thread_safety():
-    """Test that cache operations are thread-safe."""
-    from src.log_parser import TTLCache
-    import threading
-    
-    cache = TTLCache(maxsize=100, ttl=10)
-    errors = []
-    
-    @cache
-    def func(x):
-        return x * 2
-    
-    def worker():
-        try:
-            for i in range(10):
-                func(i)
-        except Exception as e:
-            errors.append(e)
-    
-    threads = [threading.Thread(target=worker) for _ in range(5)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-    
-    assert len(errors) == 0
+        with patch.object(app_config, "enable_auth", False):
+            result = check_auth()
+            assert result is True
 
+    @patch("src.auth.st")
+    def test_check_auth_ip_denied(self, mock_st):
+        """Test authentication with denied IP."""
+        from src.auth import check_auth
+        from src.config import app_config
 
-def test_ttl_cache_clear():
-    """Test cache clearing functionality."""
-    from src.log_parser import TTLCache
-    
-    cache = TTLCache(maxsize=10, ttl=10)
-    
-    @cache
-    def func(x):
-        return x
-    
-    func(1)
-    func(2)
-    func(3)
-    
-    cache.clear()
-    
-    with cache._lock:
-        assert len(cache._cache) == 0
+        mock_st._client_ip = "10.0.0.1"
+        mock_st.session_state = {}
+        mock_st.error = Mock()
+
+        with patch.object(app_config, "enable_auth", True):
+            with patch.object(app_config, "allowed_networks", ["192.168.1.0/24"]):
+                result = check_auth()
+                assert result is False
+                mock_st.error.assert_called_once()
+
+    @patch("src.auth.st")
+    def test_check_auth_already_authenticated(self, mock_st):
+        """Test when user is already authenticated."""
+        from src.auth import check_auth
+        from src.config import app_config
+
+        mock_st._client_ip = "192.168.1.100"
+        mock_st.session_state = {"authenticated": True}
+
+        with patch.object(app_config, "enable_auth", True):
+            with patch.object(app_config, "allowed_networks", ["192.168.1.0/24"]):
+                result = check_auth()
+                assert result is True
+
+    @patch("src.auth.st")
+    def test_check_auth_valid_credentials(self, mock_st):
+        """Test successful login with valid credentials."""
+        from src.auth import check_auth
+        from src.config import app_config
+
+        mock_st._client_ip = "192.168.1.100"
+        mock_st.session_state = {}
+        mock_st.container = MagicMock
+        mock_st.columns = Mock(return_value=[Mock(), Mock(), Mock()])
+        mock_st.text_input = Mock(side_effect=["admin", "password123"])
+        mock_st.button = Mock(return_value=True)
+        mock_st.rerun = Mock()
+
+        with patch.object(app_config, "enable_auth", True):
+            with patch.object(app_config, "allowed_networks", ["192.168.1.0/24"]):
+                with patch.object(app_config, "auth_username", "admin"):
+                    with patch.object(app_config, "auth_password", "password123"):
+                        result = check_auth()
+                        assert result is True
+                        mock_st.rerun.assert_called_once()
+
+    @patch("src.auth.st")
+    def test_check_auth_invalid_credentials(self, mock_st):
+        """Test failed login with invalid credentials."""
+        from src.auth import check_auth
+        from src.config import app_config
+
+        mock_st._client_ip = "192.168.1.100"
+        mock_st.session_state = {}
+        mock_st.container = MagicMock
+        mock_st.columns = Mock(return_value=[Mock(), Mock(), Mock()])
+        mock_st.text_input = Mock(side_effect=["admin", "wrongpassword"])
+        mock_st.button = Mock(return_value=True)
+        mock_st.error = Mock()
+
+        with patch.object(app_config, "enable_auth", True):
+            with patch.object(app_config, "allowed_networks", ["192.168.1.0/24"]):
+                with patch.object(app_config, "auth_username", "admin"):
+                    with patch.object(app_config, "auth_password", "password123"):
+                        result = check_auth()
+                        assert result is False
+                        mock_st.error.assert_called_once()

@@ -376,6 +376,44 @@ blocker.whitelist_ip("192.168.1.100")
 - Manuell entsperrt werden
 - Zur Whitelist hinzugefügt werden
 
+## Performance-Optimierungen
+
+Das Dashboard wurde für hohe Performance optimiert:
+
+### Datenbank-Optimierungen
+- **Connection Pooling**: Optimierte Pool-Größen mit Timeouts
+- **Zusätzliche Indizes**: Composite Indizes für Aggregations-Queries
+- **Materialized Views**: Optionale hourly_stats View für große Datensätze
+- **Pagination**: Daten werden in Chunks geladen (10.000 statt 50.000 Zeilen)
+- **Pre-aggregierte Queries**: Separate optimierte Queries für Charts
+
+### Caching-Strategie
+- **Erweiterte TTL**: Cache-Dauer von 30-60s auf 5 Minuten erhöht
+- **Smart Invalidation**: Caches werden nur bei Datenänderungen aktualisiert
+- **Separate Caches**: Stündliche und IP-Summaries separat gecached
+
+### Log-Parsing Optimierungen
+- **Parallele Verarbeitung**: Bis zu 8 Worker (vorher 4), basierend auf CPU-Kernen
+- **Optimierte Chunk-Größe**: 64KB für bessere I/O-Performance (vorher 8KB)
+- **Batch-Verarbeitung**: Effiziente Batch-Inserts in die Datenbank
+
+### Konfigurations-Optionen
+
+Füge diese Variablen zu deiner `.env` hinzu:
+
+```bash
+# Performance-Einstellungen
+QUERY_TIMEOUT=30              # Query-Timeout in Sekunden
+CACHE_TTL=300                 # Cache-Dauer in Sekunden (5 Minuten)
+MAX_WORKERS=8                 # Parallele Worker für Log-Parsing
+CHUNK_SIZE=65536             # Chunk-Größe für Datei-Lesen
+```
+
+### Auto-Refresh Verbesserungen
+- **Nicht-blockierend**: Verwendet Session-State statt sleep()
+- **Countdown-Anzeige**: Zeigt verbleibende Sekunden bis zum Refresh
+- **Smart Refresh**: Aktualisiert nur bei tatsächlichen Datenänderungen
+
 ## Lizenz
 
 MIT

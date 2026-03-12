@@ -26,7 +26,10 @@ from .database import (
     cleanup_old_data,
     get_database_info,
     get_distinct_hosts,
+    get_hourly_traffic_summary,
     get_newest_timestamp,
+    get_top_ips_summary,
+    get_traffic_count,
     health_check,
     load_traffic_df,
 )
@@ -44,33 +47,67 @@ def sync_logs() -> int:
     load_traffic_data.clear()
     _cached_hosts.clear()
     _cached_db_info.clear()
+    _cached_hourly_summary.clear()
+    _cached_top_ips.clear()
     return inserted
 
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300)  # Increased from 30s to 5 minutes
 def load_traffic_data(
     hosts: Optional[tuple] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    limit: int = 50000,
+    limit: int = 10000,  # Reduced from 50000 for better performance
+    offset: int = 0,
 ) -> pd.DataFrame:
-    """Load traffic data from database with filters."""
+    """Load traffic data from database with filters and pagination."""
     return load_traffic_df(
         hosts=list(hosts) if hosts else None,
         start_date=start_date,
         end_date=end_date,
         limit=limit,
+        offset=offset,
     )
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)  # Increased from 60s to 5 minutes
 def _cached_hosts():
     return get_distinct_hosts()
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)  # Increased from 60s to 5 minutes
 def _cached_db_info():
     return get_database_info()
+
+
+@st.cache_data(ttl=300)
+def _cached_hourly_summary(
+    hosts: Optional[tuple] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+) -> pd.DataFrame:
+    """Get cached hourly traffic summary (much faster than full data)."""
+    return get_hourly_traffic_summary(
+        hosts=list(hosts) if hosts else None,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+@st.cache_data(ttl=300)
+def _cached_top_ips(
+    hosts: Optional[tuple] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    limit: int = 100,
+) -> pd.DataFrame:
+    """Get cached top IPs summary (aggregated, faster)."""
+    return get_top_ips_summary(
+        hosts=list(hosts) if hosts else None,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+    )
 
 
 def get_newest():
@@ -144,14 +181,27 @@ def main():
         st.warning("Bitte wähle mindestens eine Domain aus.")
         return
 
-    # Load data
+    # Load data with pagination
     with st.spinner("Lade Daten..."):
+        # Get total count for pagination info
+        total_count = get_traffic_count(
+            hosts=selected_hosts,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        
+        # Load paginated data (smaller chunks for better performance)
         df = load_traffic_data(
             hosts=tuple(selected_hosts),
             start_date=start_date,
             end_date=end_date,
-            limit=app_config.max_display_rows,
+            limit=10000,  # Reduced limit for faster loading
+            offset=0,
         )
+        
+        # Show pagination info if data is truncated
+        if total_count > len(df):
+            st.info(f"Zeige {len(df)} von {total_count} Einträgen. Verwende Filter für präzisere Ergebnisse.")
 
     # Apply status code filter
     status_ranges = {
@@ -177,20 +227,35 @@ def main():
         st.info("Keine Daten für den ausgewählten Filter gefunden.")
         return
 
-    # Render dashboard
-    render_dashboard(df, auto_refresh, refresh_interval)
+    # Load optimized summaries for charts (much faster)
+    hourly_summary = _cached_hourly_summary(
+        hosts=tuple(selected_hosts),
+        start_date=start_date,
+        end_date=end_date,
+    )
+    
+    top_ips_summary = _cached_top_ips(
+        hosts=tuple(selected_hosts),
+        start_date=start_date,
+        end_date=end_date,
+        limit=100,
+    )
+
+    # Render dashboard with optimized data
+    render_dashboard(df, hourly_summary, top_ips_summary, auto_refresh, refresh_interval)
 
 
-def render_dashboard(df: pd.DataFrame, auto_refresh: bool, refresh_interval: int):
-    """Render the main dashboard components."""
+def render_dashboard(df: pd.DataFrame, hourly_summary: pd.DataFrame, top_ips_summary: pd.DataFrame, auto_refresh: bool, refresh_interval: int):
+    """Render the main dashboard components with optimized data."""
     # Create tabs for main content and blocked IPs
     tab1, tab2 = st.tabs(["📊 Dashboard", "🚫 Blocked IPs"])
     
     with tab1:
         render_metrics(df)
         st.divider()
-        render_charts(df)
-        render_top_ips(df)
+        # Use optimized summaries for charts where possible
+        render_charts(df, hourly_summary)
+        render_top_ips(df, top_ips_summary)
         render_error_paths(df)
         render_bandwidth_analysis(df)
         render_geo_analysis(df)
@@ -204,11 +269,20 @@ def render_dashboard(df: pd.DataFrame, auto_refresh: bool, refresh_interval: int
         st.divider()
         render_blocking_config()
 
-    # Auto-refresh: sync new data and rerun
+    # Non-blocking auto-refresh using session state
     if auto_refresh:
-        time.sleep(refresh_interval)
-        sync_logs()
-        st.rerun()
+        if "last_refresh" not in st.session_state:
+            st.session_state.last_refresh = time.time()
+        
+        elapsed = time.time() - st.session_state.last_refresh
+        if elapsed >= refresh_interval:
+            st.session_state.last_refresh = time.time()
+            sync_logs()
+            st.rerun()
+        else:
+            # Show countdown
+            remaining = int(refresh_interval - elapsed)
+            st.caption(f"🔄 Auto-refresh in {remaining}s")
 
 
 if __name__ == "__main__":

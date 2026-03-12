@@ -54,3 +54,19 @@ def test_should_ignore_ipv6():
     assert should_ignore_ip("fe80::1") is True  # Link-local
     assert should_ignore_ip("fc00::1") is True  # Unique local
     assert should_ignore_ip("2001:db8::1") is False  # Public IPv6
+
+
+def test_parse_log_line_with_dash_referer():
+    """Test that dash referer is converted to None."""
+    line = '[12/Oct/2023:14:32:10 +0000] - 200 200 - GET https example.com "/api/data" [Client 8.8.8.8] [Length 1024] [Gzip -] [Sent-to -] "Mozilla/5.0" "-"'
+    parsed = parse_log_line(line)
+    assert parsed is not None
+    assert parsed["referer"] is None
+
+
+def test_parse_log_line_with_dash_length():
+    """Test that dash length is converted to 0."""
+    line = '[12/Oct/2023:14:32:10 +0000] - 200 200 - GET https example.com "/api/data" [Client 8.8.8.8] [Length -] [Gzip -] [Sent-to -] "Mozilla/5.0" "-"'
+    parsed = parse_log_line(line)
+    assert parsed is not None
+    assert parsed["response_length"] == 0

@@ -61,8 +61,15 @@ class AppConfig:
             if p.strip()
         ]
     )
+    max_suspicious_paths: int = field(default_factory=lambda: int(os.getenv("MAX_SUSPICIOUS_PATHS", "5")))
     use_firewall: bool = field(default_factory=lambda: os.getenv("USE_FIREWALL", "false").lower() == "true")
 
+
+# Performance settings
+QUERY_TIMEOUT: int = int(os.getenv("QUERY_TIMEOUT", "30"))  # Database query timeout in seconds
+CACHE_TTL: int = int(os.getenv("CACHE_TTL", "300"))  # Cache time-to-live in seconds
+MAX_WORKERS: int = int(os.getenv("MAX_WORKERS", str(min(8, os.cpu_count() or 4))))  # Parallel workers
+CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "65536"))  # File read chunk size in bytes
 
 # Private IP networks to filter out
 PRIVATE_NETWORKS: List[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
@@ -115,3 +122,50 @@ def get_ignored_ips() -> frozenset:
 # Singleton instances
 db_config = DatabaseConfig()
 app_config = AppConfig()
+
+
+def validate_config() -> list[str]:
+    """Validate configuration and return list of errors."""
+    errors = []
+    
+    # Database validation
+    if not db_config.password:
+        errors.append("DB_PASSWORD is required but not set")
+    if not db_config.host:
+        errors.append("DB_HOST is required but not set")
+    if db_config.port < 1 or db_config.port > 65535:
+        errors.append(f"DB_PORT must be between 1 and 65535, got {db_config.port}")
+    
+    # Auth validation
+    if app_config.enable_auth:
+        if not app_config.auth_password:
+            errors.append("AUTH_PASSWORD is required when ENABLE_AUTH is true")
+        if len(app_config.auth_password) < 8:
+            errors.append("AUTH_PASSWORD should be at least 8 characters")
+    
+    # Network validation
+    for network in app_config.allowed_networks:
+        network = network.strip()
+        if network:
+            try:
+                ipaddress.ip_network(network)
+            except ValueError:
+                errors.append(f"Invalid network in ALLOWED_NETWORKS: {network}")
+    
+    # Numeric validation
+    if app_config.retention_days < 1:
+        errors.append(f"RETENTION_DAYS must be at least 1, got {app_config.retention_days}")
+    if app_config.block_duration < 60:
+        errors.append(f"BLOCK_DURATION should be at least 60 seconds, got {app_config.block_duration}")
+    
+    return errors
+
+
+def validate_config_or_exit():
+    """Validate configuration and exit if invalid."""
+    errors = validate_config()
+    if errors:
+        print("Configuration errors:", file=__import__("sys").stderr)
+        for error in errors:
+            print(f"  - {error}", file=__import__("sys").stderr)
+        __import__("sys").exit(1)

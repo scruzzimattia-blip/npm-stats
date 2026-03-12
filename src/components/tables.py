@@ -37,8 +37,8 @@ def render_metrics(df: pd.DataFrame) -> None:
     col6.metric("Bandbreite", format_bytes(total_bytes))
 
 
-def render_top_ips(df: pd.DataFrame) -> None:
-    """Render top IP addresses analysis."""
+def render_top_ips(df: pd.DataFrame, top_ips_summary: pd.DataFrame = None) -> None:
+    """Render top IP addresses analysis with optimized summary."""
     if df.empty:
         return
 
@@ -48,19 +48,34 @@ def render_top_ips(df: pd.DataFrame) -> None:
 
         with col1:
             st.write("**Top 10 IPs nach Requests**")
-            top_ips = df["remote_addr"].value_counts().head(10).reset_index()
-            top_ips.columns = ["IP-Adresse", "Requests"]
+            # Use optimized summary if available
+            if top_ips_summary is not None and not top_ips_summary.empty:
+                top_ips = top_ips_summary.head(10)[["remote_addr", "request_count"]].copy()
+                top_ips.columns = ["IP-Adresse", "Requests"]
+            else:
+                top_ips = df["remote_addr"].value_counts().head(10).reset_index()
+                top_ips.columns = ["IP-Adresse", "Requests"]
             st.dataframe(top_ips, width="stretch", hide_index=True)
 
         with col2:
             st.write("**Top 10 IPs nach Fehlern**")
-            error_df = df[df["status"] >= 400]
-            if not error_df.empty:
-                top_error_ips = error_df["remote_addr"].value_counts().head(10).reset_index()
-                top_error_ips.columns = ["IP-Adresse", "Fehler"]
-                st.dataframe(top_error_ips, width="stretch", hide_index=True)
+            # Use optimized summary if available
+            if top_ips_summary is not None and not top_ips_summary.empty:
+                error_ips = top_ips_summary[top_ips_summary["error_count"] > 0].head(10)
+                if not error_ips.empty:
+                    top_error_ips = error_ips[["remote_addr", "error_count"]].copy()
+                    top_error_ips.columns = ["IP-Adresse", "Fehler"]
+                    st.dataframe(top_error_ips, width="stretch", hide_index=True)
+                else:
+                    st.info("Keine Fehler im ausgewählten Zeitraum.")
             else:
-                st.info("Keine Fehler im ausgewählten Zeitraum.")
+                error_df = df[df["status"] >= 400]
+                if not error_df.empty:
+                    top_error_ips = error_df["remote_addr"].value_counts().head(10).reset_index()
+                    top_error_ips.columns = ["IP-Adresse", "Fehler"]
+                    st.dataframe(top_error_ips, width="stretch", hide_index=True)
+                else:
+                    st.info("Keine Fehler im ausgewählten Zeitraum.")
 
 
 def render_request_log(df: pd.DataFrame) -> None:

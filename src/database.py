@@ -42,7 +42,7 @@ def is_database_available() -> bool:
 
 
 def get_pool() -> ConnectionPool:
-    """Get or create the connection pool."""
+    """Get or create the optimized connection pool."""
     global _pool
     if _pool is None:
         _pool = ConnectionPool(
@@ -50,6 +50,10 @@ def get_pool() -> ConnectionPool:
             min_size=db_config.pool_min_conn,
             max_size=db_config.pool_max_conn,
             open=True,
+            # Performance optimizations
+            timeout=10,  # Connection timeout
+            max_idle=300,  # Max idle time before closing
+            max_lifetime=3600,  # Max connection lifetime
         )
         logger.info(f"Connection pool created (min={db_config.pool_min_conn}, max={db_config.pool_max_conn})")
     return _pool
@@ -143,12 +147,39 @@ def init_database() -> bool:
                     # Additional composite indexes for common query patterns
                     ("idx_traffic_host_status", "traffic (host, status)"),
                     ("idx_traffic_time_status", "traffic (time DESC, status)"),
+                    # Performance indexes for aggregation queries
+                    ("idx_traffic_hourly", "traffic (DATE_TRUNC('hour', time) DESC, host)"),
+                    ("idx_traffic_ip_time", "traffic (remote_addr, time DESC)"),
                 ]
 
                 for idx_name, idx_def in indexes:
                     cur.execute(f"""
                         CREATE INDEX IF NOT EXISTS {idx_name} ON {idx_def};
                     """)
+                
+                # Create materialized view for hourly statistics (optional, for very large datasets)
+                cur.execute("""
+                    DO $$
+                    BEGIN
+                        CREATE MATERIALIZED VIEW IF NOT EXISTS hourly_stats AS
+                        SELECT 
+                            DATE_TRUNC('hour', time) as hour,
+                            host,
+                            COUNT(*) as request_count,
+                            COUNT(DISTINCT remote_addr) as unique_ips,
+                            SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as error_count,
+                            SUM(response_length) as total_bytes
+                        FROM traffic
+                        GROUP BY DATE_TRUNC('hour', time), host;
+                        
+                        CREATE UNIQUE INDEX IF NOT EXISTS idx_hourly_stats_hour_host 
+                        ON hourly_stats (hour, host);
+                    EXCEPTION
+                        WHEN insufficient_privilege THEN
+                            -- Materialized views require more privileges, ignore if not available
+                            NULL;
+                    END $$;
+                """)
 
                 logger.info("Database schema initialized successfully")
 
@@ -299,8 +330,9 @@ def load_traffic_df(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     limit: int = 50000,
+    offset: int = 0,
 ) -> pd.DataFrame:
-    """Load traffic data from database as DataFrame using SQLAlchemy."""
+    """Load traffic data from database as DataFrame using SQLAlchemy with pagination."""
     conditions = []
     params: dict = {}
 
@@ -320,14 +352,16 @@ def load_traffic_df(
 
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
     params["limit"] = limit
+    params["offset"] = offset
 
+    # Optimized query with OFFSET for pagination
     query = f"""
         SELECT time, host, method, path, status, remote_addr,
                user_agent, referer, response_length, country_code, city
         FROM traffic
         {where_clause}
         ORDER BY time DESC
-        LIMIT :limit;
+        LIMIT :limit OFFSET :offset;
     """
 
     engine = get_engine()
@@ -338,6 +372,123 @@ def load_traffic_df(
         df["time"] = pd.to_datetime(df["time"])
 
     return df
+
+
+def get_traffic_count(
+    hosts: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+) -> int:
+    """Get total count of traffic records matching filters (for pagination)."""
+    conditions = []
+    params: List[Any] = []
+
+    if hosts:
+        conditions.append("host = ANY(%s)")
+        params.append(hosts)
+    if start_date:
+        conditions.append("time >= %s")
+        params.append(start_date)
+    if end_date:
+        conditions.append("time <= %s")
+        params.append(end_date)
+
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT COUNT(*) FROM traffic {where_clause};",
+                params or None,
+            )
+            return cur.fetchone()[0]
+
+
+def get_hourly_traffic_summary(
+    hosts: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+) -> pd.DataFrame:
+    """Get hourly traffic summary for charts (much faster than loading all rows)."""
+    conditions = []
+    params: List[Any] = []
+
+    if hosts:
+        conditions.append("host = ANY(%s)")
+        params.append(hosts)
+    if start_date:
+        conditions.append("time >= %s")
+        params.append(start_date)
+    if end_date:
+        conditions.append("time <= %s")
+        params.append(end_date)
+
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    DATE_TRUNC('hour', time) as hour,
+                    COUNT(*) as request_count,
+                    COUNT(DISTINCT remote_addr) as unique_ips,
+                    SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as error_count,
+                    SUM(response_length) as total_bytes
+                FROM traffic
+                {where_clause}
+                GROUP BY DATE_TRUNC('hour', time)
+                ORDER BY hour DESC;
+                """,
+                params or None,
+            )
+            rows = cur.fetchall()
+            return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+
+def get_top_ips_summary(
+    hosts: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    limit: int = 100,
+) -> pd.DataFrame:
+    """Get top IPs summary (aggregated, faster than loading all rows)."""
+    conditions = []
+    params: List[Any] = []
+
+    if hosts:
+        conditions.append("host = ANY(%s)")
+        params.append(hosts)
+    if start_date:
+        conditions.append("time >= %s")
+        params.append(start_date)
+    if end_date:
+        conditions.append("time <= %s")
+        params.append(end_date)
+
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    remote_addr,
+                    COUNT(*) as request_count,
+                    COUNT(DISTINCT host) as hosts_accessed,
+                    SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as error_count,
+                    SUM(response_length) as total_bytes,
+                    MAX(time) as last_seen
+                FROM traffic
+                {where_clause}
+                GROUP BY remote_addr
+                ORDER BY request_count DESC
+                LIMIT %s;
+                """,
+                params + [limit] if params else [limit],
+            )
+            rows = cur.fetchall()
+            return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
 # Blocklist operations

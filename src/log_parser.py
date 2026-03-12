@@ -7,13 +7,18 @@ import os
 import re
 import time
 from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from .config import CLOUDFLARE_NETWORKS, PRIVATE_NETWORKS, app_config, get_ignored_ips
 
 logger = logging.getLogger(__name__)
+
+# Performance constants
+CHUNK_SIZE = 65536  # Increased from 8192 for better I/O performance
+MAX_WORKERS = min(8, os.cpu_count() or 4)  # Use more workers based on CPU count
+BATCH_SIZE = 1000  # Batch size for database inserts
 
 
 class TTLCache:
@@ -220,7 +225,7 @@ def parse_log_line(line: str) -> Optional[Dict[str, Any]]:
 
 
 def read_log_file(file_path: str, limit: int) -> Iterator[str]:
-    """Read last N lines from a log file efficiently."""
+    """Read last N lines from a log file efficiently with optimized chunk size."""
     try:
         with open(file_path, "rb") as f:
             # Seek to end
@@ -230,13 +235,12 @@ def read_log_file(file_path: str, limit: int) -> Iterator[str]:
             if file_size == 0:
                 return
 
-            # Read in chunks from the end
+            # Read in chunks from the end (optimized chunk size)
             lines = []
-            chunk_size = 8192
             position = file_size
 
             while len(lines) < limit and position > 0:
-                read_size = min(chunk_size, position)
+                read_size = min(CHUNK_SIZE, position)
                 position -= read_size
                 f.seek(position)
                 chunk = f.read(read_size).decode("utf-8", errors="ignore")
@@ -306,7 +310,7 @@ def parse_all_logs(limit_per_file: Optional[int] = None, since: Optional[datetim
     If since is provided, only entries newer than that timestamp are returned,
     and fewer lines per file are read since only recent entries are needed.
 
-    Uses parallel processing for better performance on multi-core systems.
+    Uses optimized parallel processing for better performance on multi-core systems.
     """
     if since and limit_per_file is None:
         limit = 500
@@ -316,25 +320,25 @@ def parse_all_logs(limit_per_file: Optional[int] = None, since: Optional[datetim
     log_files = get_log_files()
     logger.info(f"Found {len(log_files)} log files to process")
 
-    # Use parallel processing for better performance
-    max_workers = min(4, len(log_files)) if log_files else 1
+    if not log_files:
+        return []
+
+    # Use optimized worker count based on CPU cores and file count
+    max_workers = min(MAX_WORKERS, len(log_files))
     rows = []
 
-    if max_workers > 1:
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(parse_single_log_file, fp, limit, since): fp for fp in log_files}
-            for future in as_completed(futures):
-                try:
-                    file_rows = future.result()
-                    rows.extend(file_rows)
-                except Exception as e:
-                    file_path = futures[future]
-                    logger.error(f"Error parsing {file_path}: {e}")
-    else:
-        # Single file or no files - parse sequentially
-        for file_path in log_files:
-            file_rows = parse_single_log_file(file_path, limit, since)
-            rows.extend(file_rows)
+    # Use ThreadPoolExecutor for I/O bound operations (file reading)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(parse_single_log_file, fp, limit, since): fp for fp in log_files}
+        
+        # Process results as they complete
+        for future in as_completed(futures):
+            try:
+                file_rows = future.result()
+                rows.extend(file_rows)
+            except Exception as e:
+                file_path = futures[future]
+                logger.error(f"Error parsing {file_path}: {e}")
 
     logger.info(f"Total parsed entries: {len(rows)}")
     return rows

@@ -117,8 +117,8 @@ class IPBlocker:
         if counts["total_failed"] >= app_config.max_failed_requests:
             return f"Too many failed requests ({counts['total_failed']}/{app_config.max_failed_requests})"
 
-        if counts["suspicious"] >= 5:  # Hardcoded threshold for suspicious paths
-            return f"Suspicious activity detected ({counts['suspicious']} suspicious paths)"
+        if counts["suspicious"] >= app_config.max_suspicious_paths:
+            return f"Suspicious activity detected ({counts['suspicious']}/{app_config.max_suspicious_paths} suspicious paths)"
 
         return None
 
@@ -247,6 +247,35 @@ class IPBlocker:
             "whitelisted": len(self.whitelisted_ips),
             "tracked_ips": len(self.request_counts),
         }
+
+    def cleanup_old_ips(self, max_age_minutes: int = 60):
+        """Remove old IPs from memory to prevent memory leaks.
+        
+        Args:
+            max_age_minutes: Maximum age of IP tracking data in minutes
+        """
+        cutoff = datetime.now() - timedelta(minutes=max_age_minutes)
+        
+        # Find IPs with no recent activity
+        ips_to_remove = []
+        for ip, timestamps in self.request_timestamps.items():
+            # Keep IPs that are currently blocked
+            if ip in self.blocked_ips:
+                continue
+            # Keep whitelisted IPs
+            if ip in self.whitelisted_ips:
+                continue
+            # Remove IPs with no recent timestamps
+            if not timestamps or all(ts < cutoff for ts in timestamps):
+                ips_to_remove.append(ip)
+        
+        # Remove old IPs
+        for ip in ips_to_remove:
+            del self.request_timestamps[ip]
+            del self.request_counts[ip]
+        
+        if ips_to_remove:
+            logger.debug(f"Cleaned up {len(ips_to_remove)} old IPs from memory")
 
 
 # Global blocker instance

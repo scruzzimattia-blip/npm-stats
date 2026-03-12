@@ -12,8 +12,8 @@ from ..utils import (
 )
 
 
-def render_charts(df: pd.DataFrame) -> None:
-    """Render traffic charts."""
+def render_charts(df: pd.DataFrame, hourly_summary: pd.DataFrame = None) -> None:
+    """Render traffic charts with optimized hourly summary."""
     if df.empty:
         return
 
@@ -32,9 +32,16 @@ def render_charts(df: pd.DataFrame) -> None:
                 index=2,
                 label_visibility="collapsed",
             )
-        bucket = granularity_options[selected_granularity]
-        time_df = df.set_index("time").resample(bucket).size().rename("Requests")
-        st.area_chart(time_df, width="stretch")
+        
+        # Use optimized hourly summary if available and hourly granularity selected
+        if hourly_summary is not None and not hourly_summary.empty and selected_granularity == "1 Stunde":
+            # Much faster - pre-aggregated data
+            time_df = hourly_summary.set_index("hour")["request_count"].rename("Requests")
+            st.area_chart(time_df, width="stretch")
+        else:
+            bucket = granularity_options[selected_granularity]
+            time_df = df.set_index("time").resample(bucket).size().rename("Requests")
+            st.area_chart(time_df, width="stretch")
 
     with col2:
         st.subheader("Statuscodes")

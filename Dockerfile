@@ -19,13 +19,10 @@ WORKDIR /app
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser
 
-# Install system dependencies
+# Install system dependencies (iptables removed - use host-level blocking instead)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    iptables \
-    sudo \
-    && rm -rf /var/lib/apt/lists/* \
-    && echo 'appuser ALL=(ALL) NOPASSWD: /usr/sbin/iptables' >> /etc/sudoers
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder
 COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
