@@ -9,7 +9,8 @@ from .database import (
     update_request_counters,
     reset_request_counters,
     cleanup_old_trackers,
-    get_tracked_ip_count
+    get_tracked_ip_count,
+    get_whitelist
 )
 from .notifications import send_notification
 
@@ -48,7 +49,7 @@ class IPBlocker:
         if not app_config.enable_blocking:
             return None
 
-        if ip in self.whitelisted_ips:
+        if self._is_whitelisted(ip):
             return None
 
         # Check suspicious path
@@ -101,6 +102,21 @@ class IPBlocker:
                 return True
         return False
 
+    def _is_whitelisted(self, ip: str) -> bool:
+        """Check if IP is in whitelist (local cache or DB)."""
+        if ip in self.whitelisted_ips:
+            return True
+        
+        # Check DB
+        try:
+            whitelist = get_whitelist()
+            db_ips = {row["ip_address"] for row in whitelist}
+            # Update local cache
+            self.whitelisted_ips.update(db_ips)
+            return ip in db_ips
+        except Exception:
+            return False
+
     def _block_ip(self, ip: str, reason: str, block_until: datetime):
         """Block an IP address."""
         # Avoid redundant blocking if already in local cache
@@ -124,7 +140,7 @@ class IPBlocker:
 
     def is_blocked(self, ip: str) -> bool:
         """Check if an IP is currently blocked."""
-        if ip in self.whitelisted_ips:
+        if self._is_whitelisted(ip):
             return False
 
         # Check local cache
