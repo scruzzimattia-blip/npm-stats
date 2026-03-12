@@ -711,28 +711,28 @@ def get_traffic_spike_metrics(
     baseline_start = now - timedelta(minutes=baseline_minutes)
     
     conditions = []
-    params: List[Any] = []
+    params: Dict[str, Any] = {
+        "recent_start": recent_start,
+        "baseline_start": baseline_start
+    }
     
     if hosts:
-        conditions.append("host = ANY(%s)")
-        params.append(list(hosts))
+        conditions.append("host = ANY(%(hosts)s)")
+        params["hosts"] = list(hosts)
         
     where_clause = " AND ".join(conditions) + " AND " if conditions else ""
     
     query = f"""
         SELECT
-            SUM(CASE WHEN time >= %s THEN 1 ELSE 0 END) as recent_count,
+            SUM(CASE WHEN time >= %(recent_start)s THEN 1 ELSE 0 END) as recent_count,
             COUNT(*) as baseline_count
         FROM traffic
-        WHERE {where_clause} time >= %s;
+        WHERE {where_clause} time >= %(baseline_start)s;
     """
-    
-    # We need recent_start twice and baseline_start once
-    query_params = params + [recent_start, baseline_start]
     
     with get_connection() as conn:
         with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
-            cur.execute(query, query_params)
+            cur.execute(query, params)
             res = cur.fetchone()
             
             recent_count = res["recent_count"] or 0
