@@ -3,7 +3,7 @@
 import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta
-from typing import Any, Generator, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import pandas as pd
 import psycopg
@@ -98,12 +98,11 @@ def init_database() -> bool:
                         path TEXT NOT NULL,
                         status INTEGER NOT NULL,
                         remote_addr TEXT NOT NULL,
-                        user_agent TEXT,
-                        UNIQUE (time, host, remote_addr, path)
+                        user_agent TEXT
                     );
                 """)
 
-                # Add new columns if they don't exist (migration for existing databases)
+                # Add new columns if they don't exist
                 new_columns = [
                     ("referer", "TEXT"),
                     ("response_length", "BIGINT"),
@@ -119,7 +118,6 @@ def init_database() -> bool:
                             ALTER TABLE traffic ADD COLUMN {col_name} {col_type};
                         EXCEPTION
                             WHEN duplicate_column THEN
-                                -- Column already exists, ignore
                                 NULL;
                         END $$;
                     """)
@@ -131,55 +129,25 @@ def init_database() -> bool:
                         ALTER TABLE traffic ALTER COLUMN response_length TYPE BIGINT;
                     EXCEPTION
                         WHEN others THEN
-                            -- Column is already BIGINT or doesn't exist, ignore
                             NULL;
                     END $$;
                 """)
 
-                # Create indexes for better query performance
+                # Create basic indexes
                 indexes = [
                     ("idx_traffic_time", "traffic (time DESC)"),
                     ("idx_traffic_host", "traffic (host)"),
                     ("idx_traffic_remote_addr", "traffic (remote_addr)"),
                     ("idx_traffic_status", "traffic (status)"),
                     ("idx_traffic_time_host", "traffic (time DESC, host)"),
-                    ("idx_traffic_country", "traffic (country_code)"),
-                    # Additional composite indexes for common query patterns
-                    ("idx_traffic_host_status", "traffic (host, status)"),
-                    ("idx_traffic_time_status", "traffic (time DESC, status)"),
-                    # Performance indexes for aggregation queries
-                    ("idx_traffic_hourly", "traffic (DATE_TRUNC('hour', time) DESC, host)"),
-                    ("idx_traffic_ip_time", "traffic (remote_addr, time DESC)"),
                 ]
 
                 for idx_name, idx_def in indexes:
-                    cur.execute(f"""
-                        CREATE INDEX IF NOT EXISTS {idx_name} ON {idx_def};
-                    """)
-                
-                # Create materialized view for hourly statistics (optional, for very large datasets)
-                cur.execute("""
-                    DO $$
-                    BEGIN
-                        CREATE MATERIALIZED VIEW IF NOT EXISTS hourly_stats AS
-                        SELECT 
-                            DATE_TRUNC('hour', time) as hour,
-                            host,
-                            COUNT(*) as request_count,
-                            COUNT(DISTINCT remote_addr) as unique_ips,
-                            SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as error_count,
-                            SUM(response_length) as total_bytes
-                        FROM traffic
-                        GROUP BY DATE_TRUNC('hour', time), host;
-                        
-                        CREATE UNIQUE INDEX IF NOT EXISTS idx_hourly_stats_hour_host 
-                        ON hourly_stats (hour, host);
-                    EXCEPTION
-                        WHEN insufficient_privilege THEN
-                            -- Materialized views require more privileges, ignore if not available
-                            NULL;
-                    END $$;
-                """)
+                    cur.execute(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {idx_def};")
+
+                # Cleanup problematic objects that cause IMMUTABLE errors
+                cur.execute("DROP INDEX IF EXISTS idx_traffic_hourly;")
+                cur.execute("DROP MATERIALIZED VIEW IF EXISTS hourly_stats CASCADE;")
 
                 logger.info("Database schema initialized successfully")
 
@@ -197,12 +165,8 @@ def init_database() -> bool:
                 """)
 
                 # Create indexes for blocklist table
-                cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_blocklist_ip ON blocklist (ip_address);
-                """)
-                cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_blocklist_until ON blocklist (block_until);
-                """)
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_blocklist_ip ON blocklist (ip_address);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_blocklist_until ON blocklist (block_until);")
 
                 return True
     except Exception as e:
@@ -220,8 +184,7 @@ def insert_traffic_batch(rows: List[Tuple]) -> int:
             query = """
                 INSERT INTO traffic (time, host, method, path, status, remote_addr,
                                      user_agent, referer, response_length, country_code, city, scheme)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (time, host, remote_addr, path) DO NOTHING;
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
             """
             cur.executemany(query, rows)
             return cur.rowcount
@@ -249,82 +212,6 @@ def get_newest_timestamp() -> Optional[datetime]:
             return result[0] if result else None
 
 
-def get_distinct_hosts() -> List[str]:
-    """Get list of distinct hosts."""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT DISTINCT host FROM traffic ORDER BY host;")
-            return [row[0] for row in cur.fetchall()]
-
-
-def get_traffic_stats(
-    hosts: Optional[List[str]] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
-) -> dict:
-    """Get aggregated traffic statistics."""
-    conditions = []
-    params: List[Any] = []
-
-    if hosts:
-        conditions.append("host = ANY(%s)")
-        params.append(hosts)
-    if start_date:
-        conditions.append("time >= %s")
-        params.append(start_date)
-    if end_date:
-        conditions.append("time <= %s")
-        params.append(end_date)
-
-    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-
-    with get_connection() as conn:
-        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
-            cur.execute(
-                f"""
-                SELECT
-                    COUNT(*) as total_requests,
-                    COUNT(DISTINCT remote_addr) as unique_ips,
-                    COUNT(DISTINCT host) as distinct_hosts,
-                    COUNT(CASE WHEN status >= 400 THEN 1 END) as error_count,
-                    COUNT(DISTINCT country_code) as distinct_countries,
-                    MIN(time) as first_request,
-                    MAX(time) as last_request
-                FROM traffic
-                {where_clause};
-            """,
-                params or None,
-            )
-            return dict(cur.fetchone())
-
-
-def get_database_info() -> dict:
-    """Get database statistics."""
-    with get_connection() as conn:
-        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
-            cur.execute("""
-                SELECT
-                    COUNT(*) as total_rows,
-                    pg_size_pretty(pg_total_relation_size('traffic')) as table_size,
-                    MIN(time) as oldest_record,
-                    MAX(time) as newest_record
-                FROM traffic;
-            """)
-            return dict(cur.fetchone())
-
-
-def health_check() -> bool:
-    """Check database connectivity."""
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1;")
-                return True
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return False
-
-
 def load_traffic_df(
     hosts: Optional[List[str]] = None,
     start_date: Optional[datetime] = None,
@@ -337,12 +224,8 @@ def load_traffic_df(
     params: dict = {}
 
     if hosts:
-        # Use IN clause with tuple for SQLAlchemy
-        # Parameters are safely escaped via SQLAlchemy parameter binding
-        placeholders = ", ".join([f":host_{i}" for i in range(len(hosts))])
-        conditions.append(f"host IN ({placeholders})")
-        for i, host in enumerate(hosts):
-            params[f"host_{i}"] = host
+        conditions.append("host = ANY(:hosts)")
+        params["hosts"] = hosts
     if start_date:
         conditions.append("time >= :start_date")
         params["start_date"] = start_date
@@ -354,7 +237,6 @@ def load_traffic_df(
     params["limit"] = limit
     params["offset"] = offset
 
-    # Optimized query with OFFSET for pagination
     query = f"""
         SELECT time, host, method, path, status, remote_addr,
                user_agent, referer, response_length, country_code, city
@@ -367,10 +249,9 @@ def load_traffic_df(
     engine = get_engine()
     with engine.connect() as conn:
         df = pd.read_sql(text(query), conn, params=params)
-
-    if not df.empty:
-        df["time"] = pd.to_datetime(df["time"])
-
+        # Ensure time column is datetime
+        if not df.empty and "time" in df.columns:
+            df["time"] = pd.to_datetime(df["time"])
     return df
 
 
@@ -379,7 +260,7 @@ def get_traffic_count(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
 ) -> int:
-    """Get total count of traffic records matching filters (for pagination)."""
+    """Get total count of traffic records matching filters."""
     conditions = []
     params: List[Any] = []
 
@@ -409,7 +290,7 @@ def get_hourly_traffic_summary(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
 ) -> pd.DataFrame:
-    """Get hourly traffic summary for charts (much faster than loading all rows)."""
+    """Get hourly traffic summary for charts."""
     conditions = []
     params: List[Any] = []
 
@@ -452,7 +333,7 @@ def get_top_ips_summary(
     end_date: Optional[datetime] = None,
     limit: int = 100,
 ) -> pd.DataFrame:
-    """Get top IPs summary (aggregated, faster than loading all rows)."""
+    """Get top IPs summary (aggregated)."""
     conditions = []
     params: List[Any] = []
 
@@ -495,90 +376,82 @@ def get_top_ips_summary(
 def add_blocked_ip(
     ip_address: str, reason: str, block_until: datetime, is_manual: bool = False
 ) -> bool:
-    """Add an IP to the blocklist."""
+    """Add an IP address to the blocklist."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO blocklist (ip_address, reason, block_until, is_manual)
                 VALUES (%s, %s, %s, %s)
-                ON CONFLICT (ip_address)
-                DO UPDATE SET
-                    reason = EXCLUDED.reason,
+                ON CONFLICT (ip_address) DO UPDATE
+                SET reason = EXCLUDED.reason,
                     block_until = EXCLUDED.block_until,
-                    blocked_at = NOW(),
-                    unblocked_at = NULL
+                    is_manual = EXCLUDED.is_manual,
+                    unblocked_at = NULL;
                 """,
                 (ip_address, reason, block_until, is_manual),
             )
             return True
 
 
-def remove_blocked_ip(ip_address: str) -> bool:
-    """Remove an IP from the blocklist (mark as unblocked)."""
+def unblock_ip(ip_address: str) -> bool:
+    """Remove an IP address from the blocklist."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """
-                UPDATE blocklist
-                SET unblocked_at = NOW()
-                WHERE ip_address = %s AND unblocked_at IS NULL
-                """,
+                "UPDATE blocklist SET unblocked_at = NOW() WHERE ip_address = %s;",
                 (ip_address,),
             )
-            return cur.rowcount > 0
+            return True
 
 
 def get_blocked_ips(active_only: bool = True) -> List[Tuple]:
-    """Get blocked IPs from database."""
+    """Get all blocked IPs from the database."""
+    query = "SELECT ip_address, reason, blocked_at, block_until, is_manual FROM blocklist"
+    if active_only:
+        query += " WHERE unblocked_at IS NULL AND block_until > NOW()"
+    query += " ORDER BY blocked_at DESC"
+
     with get_connection() as conn:
         with conn.cursor() as cur:
-            if active_only:
-                cur.execute(
-                    """
-                    SELECT ip_address, reason, blocked_at, block_until, is_manual
-                    FROM blocklist
-                    WHERE unblocked_at IS NULL AND block_until > NOW()
-                    ORDER BY blocked_at DESC
-                    """
-                )
-            else:
-                cur.execute(
-                    """
-                    SELECT ip_address, reason, blocked_at, block_until, is_manual
-                    FROM blocklist
-                    ORDER BY blocked_at DESC
-                    """
-                )
+            cur.execute(query)
             return cur.fetchall()
 
 
-def is_ip_blocked(ip_address: str) -> bool:
-    """Check if an IP is currently blocked."""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT 1 FROM blocklist
-                WHERE ip_address = %s
-                AND unblocked_at IS NULL
-                AND block_until > NOW()
-                """,
-                (ip_address,),
-            )
-            return cur.fetchone() is not None
-
-
 def cleanup_expired_blocks() -> int:
-    """Remove expired blocks from database."""
+    """Cleanup expired blocks from the database."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """
-                UPDATE blocklist
-                SET unblocked_at = NOW()
-                WHERE unblocked_at IS NULL
-                AND block_until <= NOW()
-                """
+                "UPDATE blocklist SET unblocked_at = NOW() WHERE unblocked_at IS NULL AND block_until <= NOW();"
             )
             return cur.rowcount
+
+
+def get_distinct_hosts() -> List[str]:
+    """Get list of distinct hosts from the database."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT DISTINCT host FROM traffic ORDER BY host;")
+            return [row[0] for row in cur.fetchall()]
+
+
+def get_database_info() -> Dict[str, Any]:
+    """Get database statistics and information."""
+    info = {}
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Row counts
+            cur.execute("SELECT COUNT(*) FROM traffic;")
+            info["traffic_count"] = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM blocklist WHERE unblocked_at IS NULL AND block_until > NOW();")
+            info["blocked_count"] = cur.fetchone()[0]
+            # Database size
+            cur.execute("SELECT pg_size_pretty(pg_database_size(current_database()));")
+            info["database_size"] = cur.fetchone()[0]
+    return info
+
+
+def health_check() -> bool:
+    """Check if database is healthy."""
+    return is_database_available()
