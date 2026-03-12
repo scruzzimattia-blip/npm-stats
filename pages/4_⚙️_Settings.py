@@ -88,20 +88,45 @@ def main():
                 update_setting("cloudflare_zone_id", cf_zone)
                 st.success("Cloudflare-Einstellungen gespeichert!")
                 st.rerun()
+        
+        st.divider()
+        st.subheader("🛡️ CrowdSec Reputation")
+        st.info("Prüft IPs gegen die lokale CrowdSec Datenbank (LAPI).")
+        with st.form("crowdsec_settings"):
+            enable_cs = st.checkbox("CrowdSec Integration Aktivieren", value=app_config.enable_crowdsec)
+            cs_url = st.text_input("CrowdSec LAPI URL", value=app_config.crowdsec_api_url)
+            cs_key = st.text_input("CrowdSec API Key", value=app_config.crowdsec_api_key, type="password")
+            
+            if st.form_submit_button("CrowdSec Speichern"):
+                update_setting("enable_crowdsec", enable_cs)
+                update_setting("crowdsec_api_url", cs_url)
+                update_setting("crowdsec_api_key", cs_key)
+                st.success("CrowdSec-Einstellungen gespeichert!")
+                st.rerun()
 
     with tab_notify:
         st.subheader("Alerting Konfiguration")
         with st.form("notification_settings"):
+            st.write("**Webhook (Discord / Slack)**")
             webhook = st.text_input(
                 "Webhook URL", 
                 value=app_config.webhook_url,
                 placeholder="https://discord.com/api/webhooks/...",
                 help="Discord, Slack oder kompatible Webhooks"
             )
+            
+            st.divider()
+            st.write("**Telegram Bot**")
+            tg_token = st.text_input("Telegram Bot Token", value=app_config.telegram_bot_token, type="password")
+            tg_chat = st.text_input("Telegram Chat ID", value=app_config.telegram_chat_id)
+            
+            st.divider()
             notify = st.checkbox("Benachrichtigung bei Blockierung senden", value=app_config.notify_on_block)
             
             if st.form_submit_button("Alerting Speichern"):
                 update_setting("webhook_url", webhook)
+                update_setting("telegram_bot_token", tg_token)
+                update_setting("telegram_chat_id", tg_chat)
                 update_setting("notify_on_block", notify)
                 st.success("Alerting-Einstellungen gespeichert!")
                 st.rerun()
