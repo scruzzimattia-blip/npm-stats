@@ -19,9 +19,10 @@ from src.components import (
     render_error_paths,
     render_request_log
 )
-from src.database import get_traffic_count, get_latest_logs
+from src.database import get_traffic_count, get_latest_logs, get_traffic_spike_metrics
 from src.utils.reports import generate_pdf_report
 from src.utils.health import check_npm_status
+from src.config import app_config
 
 def main():
     init_page("Dashboard", "📊")
@@ -29,6 +30,22 @@ def main():
     
     handle_sync_button()
     
+    selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query, selected_status = render_common_sidebar()
+
+    if not selected_hosts:
+        st.warning("Bitte wähle mindestens eine Domain aus.")
+        st.stop()
+
+    # Anomaly Detection
+    if app_config.enable_anomaly_detection:
+        spike_info = get_traffic_spike_metrics(hosts=selected_hosts)
+        if spike_info["is_spike"]:
+            st.error(
+                f"⚠️ **TRAFFIC ANOMALIE ERKANNT!**\n\n"
+                f"Anfragerate: {spike_info['current_rate']} req/min (Normal: {spike_info['baseline_rate']} req/min)\n"
+                f"Anzahl Anfragen (5m): {spike_info['recent_count']}"
+            )
+
     # System Status
     with st.expander("🛠️ System Status", expanded=False):
         status = check_npm_status()
@@ -38,17 +55,11 @@ def main():
             is_up = status.get(port, False)
             color = "🟢 Online" if is_up else "🔴 Offline"
             cols[i].metric(port_labels[port], color)
-    
+
     # Auto-sync on first load
     if "synced" not in st.session_state:
         sync_logs()
         st.session_state.synced = True
-
-    selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query, selected_status = render_common_sidebar()
-
-    if not selected_hosts:
-        st.warning("Bitte wähle mindestens eine Domain aus.")
-        st.stop()
 
     # Load data
     metrics = _cached_traffic_metrics(hosts=selected_hosts, start_date=start_date, end_date=end_date)

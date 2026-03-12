@@ -239,7 +239,12 @@ def render_user_agent_analysis(df: pd.DataFrame) -> None:
                 col2.metric("Anteil", f"{bot_percentage:.1f}%")
 
                 # Top bots
-                st.write("**Top Bots**")
+                st.write("**Top Bot-Kategorien**")
+                category_counts = bot_df["bot_category"].value_counts().reset_index()
+                category_counts.columns = ["Kategorie", "Requests"]
+                st.dataframe(category_counts, width="stretch", hide_index=True)
+
+                st.write("**Top Bot User-Agents**")
                 bot_uas = df.loc[bot_df.index, "user_agent"].value_counts().head(10).reset_index()
                 bot_uas.columns = ["User-Agent", "Requests"]
                 st.dataframe(bot_uas, width="stretch", hide_index=True)
