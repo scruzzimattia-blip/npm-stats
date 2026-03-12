@@ -134,21 +134,21 @@ def init_database() -> bool:
                             NULL;
                     END $$;
                 """)
-# Create basic indexes
-indexes = [
-    ("idx_traffic_time", "traffic (time DESC)"),
-    ("idx_traffic_host", "traffic (host)"),
-    ("idx_traffic_remote_addr", "traffic (remote_addr)"),
-    ("idx_traffic_status", "traffic (status)"),
-    ("idx_traffic_time_host", "traffic (time DESC, host)"),
-    ("idx_traffic_country", "traffic (country_code)"),
-    # Additional composite indexes for common query patterns
-    ("idx_traffic_host_status", "traffic (host, status)"),
-    ("idx_traffic_time_status", "traffic (time DESC, status)"),
-    # Performance optimized composite indexes
-    ("idx_traffic_host_time", "traffic (host, time DESC)"),
-    ("idx_traffic_ip_time", "traffic (remote_addr, time DESC)"),
-]
+                # Create basic indexes
+                indexes = [
+                    ("idx_traffic_time", "traffic (time DESC)"),
+                    ("idx_traffic_host", "traffic (host)"),
+                    ("idx_traffic_remote_addr", "traffic (remote_addr)"),
+                    ("idx_traffic_status", "traffic (status)"),
+                    ("idx_traffic_time_host", "traffic (time DESC, host)"),
+                    ("idx_traffic_country", "traffic (country_code)"),
+                    # Additional composite indexes for common query patterns
+                    ("idx_traffic_host_status", "traffic (host, status)"),
+                    ("idx_traffic_time_status", "traffic (time DESC, status)"),
+                    # Performance optimized composite indexes
+                    ("idx_traffic_host_time", "traffic (host, time DESC)"),
+                    ("idx_traffic_ip_time", "traffic (remote_addr, time DESC)"),
+                ]
 
                 for idx_name, idx_def in indexes:
                     cur.execute(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {idx_def};")
