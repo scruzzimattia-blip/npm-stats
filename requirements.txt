@@ -3,6 +3,7 @@ ipwhois>=1.2.0
 pandas>=2.0.0
 psycopg[binary,pool]>=3.2.4
 python-dateutil>=2.8.2
+requests>=2.31.0
 sqlalchemy>=2.0.0
 streamlit>=1.30.0
 streamlit-autorefresh>=1.0.1

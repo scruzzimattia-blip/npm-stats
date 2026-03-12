@@ -63,6 +63,10 @@ class AppConfig:
     )
     max_suspicious_paths: int = field(default_factory=lambda: int(os.getenv("MAX_SUSPICIOUS_PATHS", "5")))
     use_firewall: bool = field(default_factory=lambda: os.getenv("USE_FIREWALL", "false").lower() == "true")
+    # Cloudflare settings
+    enable_cloudflare: bool = field(default_factory=lambda: os.getenv("ENABLE_CLOUDFLARE", "false").lower() == "true")
+    cloudflare_api_token: str = field(default_factory=lambda: os.getenv("CLOUDFLARE_API_TOKEN", ""))
+    cloudflare_zone_id: str = field(default_factory=lambda: os.getenv("CLOUDFLARE_ZONE_ID", ""))
     # Notification settings
     webhook_url: str = field(default_factory=lambda: os.getenv("WEBHOOK_URL", ""))
     notify_on_block: bool = field(default_factory=lambda: os.getenv("NOTIFY_ON_BLOCK", "true").lower() == "true")
