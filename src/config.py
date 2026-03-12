@@ -80,6 +80,10 @@ class AppConfig:
     telegram_bot_token: str = field(default_factory=lambda: os.getenv("TELEGRAM_BOT_TOKEN", ""))
     telegram_chat_id: str = field(default_factory=lambda: os.getenv("TELEGRAM_CHAT_ID", ""))
     notify_on_block: bool = field(default_factory=lambda: os.getenv("NOTIFY_ON_BLOCK", "true").lower() == "true")
+    # AI settings
+    openrouter_api_key: str = field(default_factory=lambda: os.getenv("OPENROUTER_API_KEY", ""))
+    ai_model: str = field(default_factory=lambda: os.getenv("AI_MODEL", "google/gemini-2.0-flash-lite:free"))
+    enable_ai_auto_analysis: bool = field(default_factory=lambda: os.getenv("ENABLE_AI_AUTO_ANALYSIS", "false").lower() == "true")
 
     def load_dynamic_settings(self):
         """Load settings from database to override environment variables."""
