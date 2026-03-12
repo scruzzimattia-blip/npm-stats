@@ -394,8 +394,8 @@ def add_blocked_ip(
             return True
 
 
-def unblock_ip(ip_address: str) -> bool:
-    """Remove an IP address from the blocklist."""
+def remove_blocked_ip(ip_address: str) -> bool:
+    """Remove an IP address from the blocklist (soft delete by setting unblocked_at)."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -403,6 +403,11 @@ def unblock_ip(ip_address: str) -> bool:
                 (ip_address,),
             )
             return True
+
+
+def unblock_ip(ip_address: str) -> bool:
+    """Alias for remove_blocked_ip for better naming consistency."""
+    return remove_blocked_ip(ip_address)
 
 
 def get_blocked_ips(active_only: bool = True) -> List[Tuple]:
