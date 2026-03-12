@@ -1,6 +1,7 @@
 """Tables and metric components for Streamlit application."""
 
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
 import streamlit as st
@@ -14,27 +15,38 @@ from ..utils import (
 )
 
 
-def render_metrics(df: pd.DataFrame) -> None:
+def render_metrics(data: Union[pd.DataFrame, Dict[str, Any]]) -> None:
     """Render key metrics."""
-    if df.empty:
-        return
+    if isinstance(data, pd.DataFrame):
+        if data.empty:
+            return
+        total = len(data)
+        unique_ips = data["remote_addr"].nunique()
+        errors = len(data[data["status"] >= 400])
+        err_rate = calculate_error_rate(total, errors)
+        distinct_hosts = data["host"].nunique()
+        distinct_countries = data["country_code"].nunique() if "country_code" in data.columns else 0
+        total_bytes = data["response_length"].sum() if "response_length" in data.columns else 0
+    else:
+        # Dictionary from DB aggregation
+        total = data.get("total_requests", 0)
+        unique_ips = data.get("unique_ips", 0)
+        errors = data.get("error_count", 0)
+        err_rate = calculate_error_rate(total, errors)
+        # These are not in the fast metrics query, fallback to 0 or estimates
+        distinct_hosts = 0 
+        distinct_countries = 0
+        total_bytes = data.get("total_bytes", 0)
 
     col1, col2, col3, col4, col5, col6 = st.columns(6)
-
-    total = len(df)
-    unique_ips = df["remote_addr"].nunique()
-    errors = len(df[df["status"] >= 400])
-    err_rate = calculate_error_rate(total, errors)
-    distinct_hosts = df["host"].nunique()
-    distinct_countries = df["country_code"].nunique() if "country_code" in df.columns else 0
-    total_bytes = df["response_length"].sum() if "response_length" in df.columns else 0
-
     col1.metric("Requests", format_number(total))
     col2.metric("Unique IPs", format_number(unique_ips))
     col3.metric("Fehlerrate", f"{err_rate:.1f}%")
-    col4.metric("Domains", format_number(distinct_hosts))
-    col5.metric("Länder", format_number(distinct_countries))
-    col6.metric("Bandbreite", format_bytes(total_bytes))
+    col4.metric("Bandbreite", format_bytes(total_bytes))
+    
+    if isinstance(data, pd.DataFrame):
+        col5.metric("Domains", format_number(distinct_hosts))
+        col6.metric("Länder", format_number(distinct_countries))
 
 
 def render_top_ips(df: pd.DataFrame, top_ips_summary: pd.DataFrame = None) -> None:

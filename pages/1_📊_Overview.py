@@ -8,6 +8,7 @@ from src.ui_utils import (
     load_traffic_data, 
     _cached_hourly_summary, 
     _cached_top_ips,
+    _cached_traffic_metrics,
     sync_logs
 )
 from src.components import (
@@ -38,7 +39,7 @@ def main():
         st.stop()
 
     # Load data
-    total_count = get_traffic_count(hosts=selected_hosts, start_date=start_date, end_date=end_date)
+    metrics = _cached_traffic_metrics(hosts=selected_hosts, start_date=start_date, end_date=end_date)
     df = load_traffic_data(
         hosts=selected_hosts,
         start_date=start_date,
@@ -59,7 +60,7 @@ def main():
                 use_container_width=True
             )
 
-    render_metrics(df)
+    render_metrics(metrics)
     st.divider()
     
     hourly_summary = _cached_hourly_summary(hosts=selected_hosts, start_date=start_date, end_date=end_date)

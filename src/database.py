@@ -399,6 +399,49 @@ def get_traffic_count(
             return cur.fetchone()[0]
 
 
+def get_traffic_metrics(
+    hosts: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Get aggregated traffic metrics directly from DB."""
+    conditions = []
+    params: List[Any] = []
+
+    if hosts:
+        conditions.append("host = ANY(%s)")
+        params.append(list(hosts))
+    if start_date:
+        conditions.append("time >= %s")
+        params.append(start_date)
+    if end_date:
+        conditions.append("time <= %s")
+        params.append(end_date)
+
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    query = f"""
+        SELECT 
+            COUNT(*) as total_requests,
+            COUNT(DISTINCT remote_addr) as unique_ips,
+            SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as error_count,
+            SUM(response_length) as total_bytes
+        FROM traffic
+        {where_clause};
+    """
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            cur.execute(query, params or None)
+            res = cur.fetchone()
+            return {
+                "total_requests": res["total_requests"] or 0,
+                "unique_ips": res["unique_ips"] or 0,
+                "error_count": res["error_count"] or 0,
+                "total_bytes": res["total_bytes"] or 0,
+            }
+
+
 def get_hourly_traffic_summary(
     hosts: Optional[List[str]] = None,
     start_date: Optional[datetime] = None,

@@ -51,6 +51,7 @@ def sync_logs() -> int:
     _cached_db_info.clear()
     _cached_hourly_summary.clear()
     _cached_top_ips.clear()
+    _cached_traffic_metrics.clear()
     return inserted
 
 
@@ -107,6 +108,20 @@ def _cached_top_ips(
         start_date=start_date,
         end_date=end_date,
         limit=limit
+    )
+
+
+@st.cache_data(ttl=300)
+def _cached_traffic_metrics(
+    hosts: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+):
+    from .database import get_traffic_metrics
+    return get_traffic_metrics(
+        hosts=list(hosts) if hosts else None,
+        start_date=start_date,
+        end_date=end_date,
     )
 
 
