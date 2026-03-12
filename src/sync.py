@@ -1,7 +1,7 @@
 """Shared log synchronization logic for NPM Monitor."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from .blocking import get_blocker
@@ -58,7 +58,7 @@ def sync_logs(since: Optional[datetime] = None) -> int:
         # Store blocked IPs in database
         for ip, reason in blocked_ips.items():
             try:
-                block_until = datetime.now() + timedelta(seconds=app_config.block_duration)
+                block_until = datetime.now(timezone.utc) + timedelta(seconds=app_config.block_duration)
                 add_blocked_ip(ip, reason, block_until, is_manual=False)
                 logger.warning(f"Auto-blocked IP {ip}: {reason}")
             except Exception as e:

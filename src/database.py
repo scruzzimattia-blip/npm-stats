@@ -2,7 +2,7 @@
 
 import logging
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import pandas as pd
@@ -109,6 +109,8 @@ def init_database() -> bool:
                     ("country_code", "CHAR(2)"),
                     ("city", "TEXT"),
                     ("scheme", "TEXT"),
+                    ("latitude", "DOUBLE PRECISION"),
+                    ("longitude", "DOUBLE PRECISION"),
                 ]
 
                 for col_name, col_type in new_columns:
@@ -140,6 +142,9 @@ def init_database() -> bool:
                     ("idx_traffic_remote_addr", "traffic (remote_addr)"),
                     ("idx_traffic_status", "traffic (status)"),
                     ("idx_traffic_time_host", "traffic (time DESC, host)"),
+                    ("idx_traffic_country", "traffic (country_code)"),
+                    ("idx_traffic_host_status", "traffic (host, status)"),
+                    ("idx_traffic_time_status", "traffic (time DESC, status)"),
                 ]
 
                 for idx_name, idx_def in indexes:
@@ -148,6 +153,19 @@ def init_database() -> bool:
                 # Cleanup problematic objects that cause IMMUTABLE errors
                 cur.execute("DROP INDEX IF EXISTS idx_traffic_hourly;")
                 cur.execute("DROP MATERIALIZED VIEW IF EXISTS hourly_stats CASCADE;")
+
+                # Create request tracker table for shared blocking state
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS request_tracker (
+                        ip_address TEXT PRIMARY KEY,
+                        count_404 INTEGER DEFAULT 0,
+                        count_403 INTEGER DEFAULT 0,
+                        count_5xx INTEGER DEFAULT 0,
+                        count_suspicious INTEGER DEFAULT 0,
+                        total_failed INTEGER DEFAULT 0,
+                        last_update TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
 
                 logger.info("Database schema initialized successfully")
 
@@ -183,17 +201,102 @@ def insert_traffic_batch(rows: List[Tuple]) -> int:
         with conn.cursor() as cur:
             query = """
                 INSERT INTO traffic (time, host, method, path, status, remote_addr,
-                                     user_agent, referer, response_length, country_code, city, scheme)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                                     user_agent, referer, response_length, country_code, city, scheme, latitude, longitude)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
             """
             cur.executemany(query, rows)
             return cur.rowcount
 
 
+# Request tracker operations for shared blocking state
+def update_request_counters(
+    ip: str, status: int, is_suspicious: bool = False
+) -> Dict[str, int]:
+    """Update request counters in DB and return current counts.
+    
+    Resets counters if last update was more than 5 minutes ago.
+    """
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            # Check if entry exists and is recent
+            cur.execute(
+                "SELECT * FROM request_tracker WHERE ip_address = %s;", (ip,)
+            )
+            row = cur.fetchone()
+            
+            now = datetime.now(timezone.utc)
+            reset = False
+            if row:
+                last_update = row["last_update"]
+                if now - last_update > timedelta(minutes=5):
+                    reset = True
+            
+            is_404 = 1 if status == 404 else 0
+            is_403 = 1 if status == 403 else 0
+            is_5xx = 1 if 500 <= status <= 599 else 0
+            is_susp = 1 if is_suspicious else 0
+            is_failed = 1 if (is_404 or is_403 or is_5xx or is_susp) else 0
+
+            if not row or reset:
+                # Insert or Reset
+                cur.execute(
+                    """
+                    INSERT INTO request_tracker (ip_address, count_404, count_403, count_5xx, count_suspicious, total_failed, last_update)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (ip_address) DO UPDATE
+                    SET count_404 = EXCLUDED.count_404,
+                        count_403 = EXCLUDED.count_403,
+                        count_5xx = EXCLUDED.count_5xx,
+                        count_suspicious = EXCLUDED.count_suspicious,
+                        total_failed = EXCLUDED.total_failed,
+                        last_update = EXCLUDED.last_update;
+                    """,
+                    (ip, is_404, is_403, is_5xx, is_susp, is_failed, now),
+                )
+            else:
+                # Increment
+                cur.execute(
+                    """
+                    UPDATE request_tracker
+                    SET count_404 = count_404 + %s,
+                        count_403 = count_403 + %s,
+                        count_5xx = count_5xx + %s,
+                        count_suspicious = count_suspicious + %s,
+                        total_failed = total_failed + %s,
+                        last_update = %s
+                    WHERE ip_address = %s;
+                    """,
+                    (is_404, is_403, is_5xx, is_susp, is_failed, now, ip),
+                )
+            
+            # Get updated counts
+            cur.execute("SELECT * FROM request_tracker WHERE ip_address = %s;", (ip,))
+            return cur.fetchone()
+
+
+def reset_request_counters(ip: str):
+    """Reset counters for an IP after blocking."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM request_tracker WHERE ip_address = %s;", (ip,)
+            )
+
+
+def cleanup_old_trackers(max_age_minutes: int = 60):
+    """Remove old IPs from tracker to keep table small."""
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM request_tracker WHERE last_update < %s;", (cutoff,)
+            )
+
+
 def cleanup_old_data(days: Optional[int] = None) -> int:
     """Delete data older than specified days. Returns number of deleted rows."""
     retention_days = days if days is not None else app_config.retention_days
-    cutoff_date = datetime.now() - timedelta(days=retention_days)
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
 
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -239,7 +342,7 @@ def load_traffic_df(
 
     query = f"""
         SELECT time, host, method, path, status, remote_addr,
-               user_agent, referer, response_length, country_code, city
+               user_agent, referer, response_length, country_code, city, latitude, longitude
         FROM traffic
         {where_clause}
         ORDER BY time DESC

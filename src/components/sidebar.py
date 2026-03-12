@@ -1,6 +1,6 @@
 """Sidebar component for Streamlit application."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Callable, List, Tuple
 
 import streamlit as st
@@ -32,9 +32,9 @@ def render_sidebar(
     if st.sidebar.checkbox("Eigenen Zeitraum wählen"):
         col1, col2 = st.sidebar.columns(2)
         with col1:
-            custom_start = st.date_input("Von", value=datetime.now().date() - timedelta(days=7))
+            custom_start = st.date_input("Von", value=datetime.now(timezone.utc).date() - timedelta(days=7))
         with col2:
-            custom_end = st.date_input("Bis", value=datetime.now().date())
+            custom_end = st.date_input("Bis", value=datetime.now(timezone.utc).date())
         start_date = datetime.combine(custom_start, datetime.min.time())
         end_date = datetime.combine(custom_end, datetime.max.time())
 

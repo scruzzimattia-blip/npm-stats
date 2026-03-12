@@ -2,7 +2,7 @@
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from ipaddress import ip_address, ip_network
 from typing import Dict, List, Tuple
 
@@ -13,7 +13,7 @@ from .config import app_config
 logger = logging.getLogger(__name__)
 
 # Rate limiting storage: IP -> (failed_attempts, first_attempt_time, blocked_until)
-_login_attempts: Dict[str, Tuple[int, datetime, datetime]] = defaultdict(lambda: (0, datetime.now(), datetime.min))
+_login_attempts: Dict[str, Tuple[int, datetime, datetime]] = defaultdict(lambda: (0, datetime.now(timezone.utc), datetime.fromtimestamp(0, timezone.utc)))
 
 # Rate limiting configuration
 MAX_LOGIN_ATTEMPTS = 5
@@ -72,7 +72,7 @@ def _check_rate_limit(ip: str) -> Tuple[bool, int]:
     Returns:
         Tuple of (is_allowed, minutes_remaining)
     """
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     attempts, first_attempt, blocked_until = _login_attempts[ip]
     
     # Check if currently blocked
@@ -90,7 +90,7 @@ def _check_rate_limit(ip: str) -> Tuple[bool, int]:
 
 def _record_failed_attempt(ip: str):
     """Record a failed login attempt."""
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     attempts, first_attempt, _ = _login_attempts[ip]
     
     # Reset if window has passed

@@ -1,6 +1,6 @@
 """Tables and metric components for Streamlit application."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 import streamlit as st
@@ -108,7 +108,7 @@ def render_request_log(df: pd.DataFrame) -> None:
             st.download_button(
                 label="CSV Export",
                 data=csv,
-                file_name=f"npm_traffic_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                file_name=f"npm_traffic_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv",
             )
 
@@ -117,7 +117,7 @@ def render_request_log(df: pd.DataFrame) -> None:
             st.download_button(
                 label="JSON Export",
                 data=json_data,
-                file_name=f"npm_traffic_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                file_name=f"npm_traffic_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json",
                 mime="application/json",
             )
 

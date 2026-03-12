@@ -115,19 +115,21 @@ def init_geoip() -> bool:
 
 
 @geoip_cache
-def get_geoip_info(ip: str) -> Tuple[Optional[str], Optional[str]]:
-    """Get country code and city for an IP address."""
+def get_geoip_info(ip: str) -> Tuple[Optional[str], Optional[str], Optional[float], Optional[float]]:
+    """Get country code, city, latitude, and longitude for an IP address."""
     if _geoip_reader is None:
-        return None, None
+        return None, None, None, None
 
     try:
         response = _geoip_reader.city(ip)
         country = response.country.iso_code
         city = response.city.name
-        return country, city
+        lat = response.location.latitude
+        lon = response.location.longitude
+        return country, city, lat, lon
     except Exception as e:
         logger.debug(f"GeoIP lookup failed for IP '{ip}': {e}")
-        return None, None
+        return None, None, None, None
 
 
 def is_ip_in_networks(ip_str: str, networks: List) -> bool:
@@ -206,7 +208,7 @@ def parse_log_line(line: str) -> Optional[Dict[str, Any]]:
         length = 0
 
     # Get GeoIP info
-    country, city = get_geoip_info(client_ip)
+    country, city, lat, lon = get_geoip_info(client_ip)
 
     return {
         "time": dt,
@@ -220,6 +222,8 @@ def parse_log_line(line: str) -> Optional[Dict[str, Any]]:
         "response_length": length,
         "country_code": country,
         "city": city,
+        "latitude": lat,
+        "longitude": lon,
         "scheme": scheme,
     }
 
@@ -296,6 +300,8 @@ def parse_single_log_file(file_path: str, limit: int, since: Optional[datetime])
                     parsed["country_code"],
                     parsed["city"],
                     parsed.get("scheme", "https"),
+                    parsed.get("latitude"),
+                    parsed.get("longitude"),
                 )
             )
             file_rows += 1

@@ -1,7 +1,7 @@
 """Utility functions for NPM Monitor."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import pandas as pd
@@ -41,7 +41,7 @@ def calculate_error_rate(total: int, errors: int) -> float:
 
 def get_time_ranges() -> dict[str, tuple[Optional[datetime], Optional[datetime]]]:
     """Get predefined time range options."""
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     return {
         "Letzte Stunde": (now - timedelta(hours=1), now),
         "Letzte 6 Stunden": (now - timedelta(hours=6), now),
@@ -172,7 +172,7 @@ def get_relative_time(dt: datetime) -> str:
     if dt is None:
         return "Nie"
 
-    now = datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now()
+    now = datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now(timezone.utc)
 
     # Convert dt to same timezone as now for accurate comparison
     if dt.tzinfo and not now.tzinfo:
