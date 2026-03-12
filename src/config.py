@@ -187,6 +187,13 @@ def validate_config() -> list[str]:
     if app_config.block_duration < 60:
         errors.append(f"BLOCK_DURATION should be at least 60 seconds, got {app_config.block_duration}")
     
+    # Cloudflare validation
+    if app_config.enable_cloudflare:
+        if not app_config.cloudflare_api_token:
+            errors.append("CLOUDFLARE_API_TOKEN ist erforderlich, wenn Cloudflare aktiviert ist")
+        if not app_config.cloudflare_zone_id:
+            errors.append("CLOUDFLARE_ZONE_ID ist erforderlich, wenn Cloudflare aktiviert ist")
+    
     return errors
 
 
