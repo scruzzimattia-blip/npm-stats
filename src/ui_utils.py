@@ -36,6 +36,7 @@ def init_page(title: str, icon: str = "🌐"):
     )
     setup_logging()
     init_geoip()
+    app_config.load_dynamic_settings()
     
     if not health_check():
         st.error("Datenbankverbindung fehlgeschlagen!")

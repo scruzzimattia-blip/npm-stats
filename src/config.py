@@ -67,6 +67,28 @@ class AppConfig:
     webhook_url: str = field(default_factory=lambda: os.getenv("WEBHOOK_URL", ""))
     notify_on_block: bool = field(default_factory=lambda: os.getenv("NOTIFY_ON_BLOCK", "true").lower() == "true")
 
+    def load_dynamic_settings(self):
+        """Load settings from database to override environment variables."""
+        try:
+            from .database import get_all_settings
+            db_settings = get_all_settings()
+            
+            # Map DB keys to attribute names
+            for key, value in db_settings.items():
+                if hasattr(self, key):
+                    attr_type = type(getattr(self, key))
+                    if attr_type == bool:
+                        setattr(self, key, value.lower() == "true")
+                    elif attr_type == int:
+                        setattr(self, key, int(value))
+                    elif attr_type == list:
+                        setattr(self, key, [p.strip() for p in value.split(",") if p.strip()])
+                    else:
+                        setattr(self, key, value)
+        except Exception:
+            # Database might not be ready yet
+            pass
+
 
 # Performance settings
 QUERY_TIMEOUT: int = int(os.getenv("QUERY_TIMEOUT", "30"))  # Database query timeout in seconds
