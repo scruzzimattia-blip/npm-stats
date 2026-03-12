@@ -387,6 +387,11 @@ def load_traffic_df(
     return df
 
 
+def get_latest_logs(limit: int = 20) -> pd.DataFrame:
+    """Convenience function to get the most recent traffic logs."""
+    return load_traffic_df(limit=limit)
+
+
 def get_traffic_count(
     hosts: Optional[List[str]] = None,
     start_date: Optional[datetime] = None,
