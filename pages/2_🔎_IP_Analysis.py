@@ -14,6 +14,7 @@ from src.components import (
     render_geo_summary
 )
 from src.components.maps import render_geo_map
+from src.utils.whois import get_whois_info
 
 def main():
     init_page("IP-Analyse", "🔎")
@@ -53,6 +54,30 @@ def main():
     with col2:
         render_user_agent_analysis(df)
         
+    st.divider()
+    
+    st.subheader("🕵️ Einzel-IP Untersuchung")
+    ip_to_check = st.text_input("IP-Adresse eingeben (z.B. für Whois-Abfrage)")
+    if ip_to_check:
+        if st.button("Whois abfragen", type="primary"):
+            with st.spinner(f"Whois-Daten für {ip_to_check} werden abgerufen..."):
+                whois_data = get_whois_info(ip_to_check)
+                if whois_data:
+                    st.success("Whois-Daten erfolgreich abgerufen!")
+                    col_w1, col_w2 = st.columns(2)
+                    with col_w1:
+                        st.metric("ASN", whois_data.get("asn", "N/A"))
+                        st.metric("Country", whois_data.get("asn_country_code", "N/A"))
+                    with col_w2:
+                        st.metric("Netzwerk", whois_data.get("network_name", "N/A"))
+                        st.write("**Abuse Emails:**")
+                        for email in whois_data.get("abuse_emails", []):
+                            st.code(email)
+                        if not whois_data.get("abuse_emails"):
+                            st.write("Keine Abuse-Emails gefunden.")
+                else:
+                    st.error("Whois-Abfrage fehlgeschlagen oder 'ipwhois' ist nicht installiert.")
+
     st.divider()
     render_referer_analysis(df)
 
