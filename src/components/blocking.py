@@ -1,7 +1,7 @@
 """Blocked IPs dashboard component."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 import pandas as pd
 import streamlit as st
@@ -14,200 +14,204 @@ from ..database import (
     add_blocked_ip, 
     get_whitelist, 
     add_to_whitelist, 
-    remove_from_whitelist
+    remove_from_whitelist,
+    get_blocklist_with_ai_status
 )
+from ..utils import format_number
 
 logger = logging.getLogger(__name__)
 
 
 @st.cache_data(ttl=10)
-def _get_cached_blocked_ips():
-    """Get blocked IPs with caching."""
+def _get_cached_blocklist_rich():
+    """Get rich blocklist with caching."""
     try:
-        return get_blocked_ips(active_only=True)
+        return get_blocklist_with_ai_status()
     except Exception as e:
-        logger.error(f"Error getting blocked IPs: {e}")
+        logger.error(f"Error getting rich blocklist: {e}")
         return []
 
 
 def render_blocked_ips():
-    """Render the blocked IPs management interface."""
-    st.subheader("🚫 Blocked IPs")
-
-    # Manual block form
-    with st.expander("➕ IP manuell sperren"):
-        with st.form("manual_block_form"):
-            col1, col2 = st.columns(2)
-            with col1:
-                manual_ip = st.text_input("IP Adresse")
-            with col2:
-                manual_reason = st.text_input("Grund", value="Manuelle Sperre")
-            
-            manual_duration = st.number_input("Dauer (Minuten)", min_value=1, value=60)
-            
-            if st.form_submit_button("IP Sperren"):
-                if manual_ip:
-                    from datetime import timezone, timedelta
-                    until = datetime.now(timezone.utc) + timedelta(minutes=manual_duration)
-                    add_blocked_ip(manual_ip, manual_reason, until, is_manual=True)
-                    st.success(f"IP {manual_ip} für {manual_duration} Min gesperrt.")
-                    st.rerun()
-
-    if not app_config.enable_blocking:
-        st.info("IP blocking is disabled. Enable it in configuration to use this feature.")
-        return
+    """Render the enhanced blocked IPs management interface."""
+    st.subheader("🚫 Aktive Sperrliste")
 
     blocker = get_blocker()
+    
+    # 1. Action Buttons & Quick Controls
+    col_actions1, col_actions2 = st.columns([2, 1])
+    
+    with col_actions1:
+        with st.expander("➕ IP manuell sperren"):
+            with st.form("manual_block_form", clear_on_submit=True):
+                c1, c2 = st.columns(2)
+                with c1:
+                    manual_ip = st.text_input("IP Adresse", placeholder="z.B. 1.2.3.4")
+                with c2:
+                    manual_reason = st.text_input("Grund", value="Manuelle Sperre")
+                
+                c3, c4 = st.columns(2)
+                with c3:
+                    manual_duration = st.number_input("Dauer", min_value=1, value=60, help="In Minuten")
+                with c4:
+                    duration_unit = st.selectbox("Einheit", ["Minuten", "Stunden", "Tage"])
+                
+                if st.form_submit_button("Sperre anlegen", type="primary", use_container_width=True):
+                    if manual_ip:
+                        mult = {"Minuten": 1, "Stunden": 60, "Tage": 1440}
+                        until = datetime.now(timezone.utc) + timedelta(minutes=manual_duration * mult[duration_unit])
+                        add_blocked_ip(manual_ip, manual_reason, until, is_manual=True)
+                        st.success(f"IP {manual_ip} wurde gesperrt.")
+                        _get_cached_blocklist_rich.clear()
+                        st.rerun()
 
-    # Statistics (fast, in-memory)
-    stats = blocker.get_stats()
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric("Currently Blocked", stats["total_blocked"])
-    with col2:
-        st.metric("Whitelisted IPs", stats["whitelisted"])
-    with col3:
-        st.metric("Tracked IPs", stats["tracked_ips"])
-
-    st.markdown("---")
-
-    # Get blocked IPs from database (with caching)
-    try:
-        blocked_ips = _get_cached_blocked_ips()
-
-        if not blocked_ips:
-            st.info("No IPs are currently blocked.")
-            return
-
-        # Limit display to last 100 IPs for performance
-        display_ips = blocked_ips[:100]
-        if len(blocked_ips) > 100:
-            st.warning(f"Showing last 100 of {len(blocked_ips)} blocked IPs")
-
-        # Create DataFrame
-        df_data = []
-        for ip, reason, blocked_at, block_until, is_manual in display_ips:
-            df_data.append(
-                {
-                    "IP Address": ip,
-                    "Reason": reason[:50] + "..." if len(reason) > 50 else reason,
-                    "Blocked": blocked_at.strftime("%m/%d %H:%M"),
-                    "Until": block_until.strftime("%m/%d %H:%M"),
-                    "Type": "Manual" if is_manual else "Auto",
-                }
-            )
-
-        df = pd.DataFrame(df_data)
-
-        # Display table (simplified)
-        st.dataframe(df, use_container_width=True, hide_index=True)
-
-        # Unblock IPs
-        st.markdown("### Unblock IPs")
-
-        selected_ips = st.multiselect(
-            "Select IPs to unblock",
-            options=[ip[0] for ip in display_ips],
-            key="unblock_ips",
-            max_selections=10,
-        )
-
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            unblock_button = st.button("Unblock Selected IPs", type="secondary")
-        with col2:
-            refresh_button = st.button("🔄 Refresh", type="primary")
-
-        if refresh_button:
-            _get_cached_blocked_ips.clear()
+    with col_actions2:
+        if st.button("🗑️ Alle Sperren aufheben", type="secondary", use_container_width=True, help="Entfernt ALLE aktiven Sperren aus der Datenbank und Firewall"):
+            from ..database import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("UPDATE blocklist SET unblocked_at = NOW() WHERE unblocked_at IS NULL")
+            _get_cached_blocklist_rich.clear()
+            st.toast("Alle IPs wurden entsperrt.", icon="✅")
             st.rerun()
 
-        if unblock_button:
-            if not selected_ips:
-                st.warning("Please select IPs to unblock")
-            else:
-                with st.spinner("Unblocking IPs..."):
-                    unblocked_count = 0
-                    for ip in selected_ips:
-                        try:
-                            # Remove from database
-                            if remove_blocked_ip(ip):
-                                # Remove from memory
-                                blocker.unblock_ip(ip)
-                                unblocked_count += 1
-                                logger.info(f"Manually unblocked IP: {ip}")
-                        except Exception as e:
-                            logger.error(f"Error unblocking IP {ip}: {e}")
-                            st.error(f"Failed to unblock {ip}")
-
-                    if unblocked_count > 0:
-                        # Clear cache
-                        _get_cached_blocked_ips.clear()
-                        st.success(f"Unblocked {unblocked_count} IP(s)")
-                        # Use session state to force refresh instead of rerun
-                        st.session_state.unblock_success = True
-
-    except Exception as e:
-        logger.error(f"Error loading blocked IPs: {e}")
-        st.error(f"Error loading blocked IPs: {e}")
-
-    # Whitelist section
-    st.divider()
-    st.subheader("⚪ Whitelist")
+    # 2. Rich Statistics
+    rich_blocklist = _get_cached_blocklist_rich()
+    stats = blocker.get_stats()
     
-    with st.expander("➕ IP zur Whitelist hinzufügen"):
-        with st.form("manual_whitelist_form"):
-            w_ip = st.text_input("IP Adresse")
-            w_reason = st.text_input("Grund", value="Manuelle Whitelist")
-            if st.form_submit_button("Whitelist hinzufügen"):
-                if w_ip:
-                    add_to_whitelist(w_ip, w_reason)
-                    st.success(f"IP {w_ip} zur Whitelist hinzugefügt.")
+    col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+    col_s1.metric("Aktive Sperren", len(rich_blocklist))
+    col_s2.metric("Whitelist", stats["whitelisted"])
+    
+    # Calculate most common reason
+    if rich_blocklist:
+        reasons = [r['reason'] for r in rich_blocklist]
+        top_reason = max(set(reasons), key=reasons.count)
+        col_s3.metric("Top Grund", top_reason.split('(')[0].strip()[:15])
+    else:
+        col_s3.metric("Top Grund", "-")
+        
+    col_s4.metric("Überwachte IPs", stats["tracked_ips"])
+
+    st.divider()
+
+    # 3. Search and Filter
+    search_col1, search_col2 = st.columns([3, 1])
+    with search_col1:
+        search_term = st.text_input("🔍 Sperrliste durchsuchen (IP oder Grund)", placeholder="Suchen...")
+    with search_col2:
+        filter_type = st.selectbox("Typ", ["Alle", "Auto", "Manuell"])
+
+    # Apply filters
+    filtered_list = rich_blocklist
+    if search_term:
+        filtered_list = [r for r in filtered_list if search_term.lower() in r['ip_address'].lower() or search_term.lower() in r['reason'].lower()]
+    if filter_type != "Alle":
+        is_manual_filter = (filter_type == "Manuell")
+        filtered_list = [r for r in filtered_list if r['is_manual'] == is_manual_filter]
+
+    if not filtered_list:
+        st.info("Keine Sperren gefunden, die den Kriterien entsprechen.")
+    else:
+        # Create Display DataFrame
+        display_data = []
+        for r in filtered_list:
+            display_data.append({
+                "IP Adresse": r['ip_address'],
+                "Grund": r['reason'],
+                "Gesperrt seit": r['blocked_at'].strftime("%Y-%m-%d %H:%M"),
+                "Bis": r['block_until'].strftime("%Y-%m-%d %H:%M"),
+                "Typ": "👤 Manuell" if r['is_manual'] else "🤖 Auto",
+                "KI": "🧠 Ja" if r['ai_report_count'] > 0 else "➖"
+            })
+        
+        df = pd.DataFrame(display_data)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+        # 4. Multi-Select Actions
+        st.write(f"**Aktionen für {len(filtered_list)} Einträge:**")
+        col_m1, col_s_btn = st.columns([3, 1])
+        
+        with col_m1:
+            selected_to_unblock = st.multiselect(
+                "IPs zum Entsperren auswählen",
+                options=[r['ip_address'] for r in filtered_list],
+                max_selections=50
+            )
+        
+        with col_s_btn:
+            if st.button("🔓 Entsperren", type="primary", use_container_width=True):
+                if selected_to_unblock:
+                    for ip in selected_to_unblock:
+                        remove_blocked_ip(ip)
+                        blocker.unblock_ip(ip)
+                    st.success(f"{len(selected_to_unblock)} IPs entsperrt.")
+                    _get_cached_blocklist_rich.clear()
                     st.rerun()
 
-    try:
-        whitelist = get_whitelist()
-        if whitelist:
-            w_df = pd.DataFrame(whitelist)
-            w_df.columns = ["IP Adresse", "Grund", "Hinzugefügt am"]
-            st.dataframe(w_df, use_container_width=True, hide_index=True)
-            
-            # Unwhitelist multiselect
-            ips_to_remove = st.multiselect("Vom Whitelist entfernen", options=w_df["IP Adresse"].tolist())
-            if st.button("Ausgewählte IPs entfernen"):
-                for ip in ips_to_remove:
-                    remove_from_whitelist(ip)
-                st.success(f"{len(ips_to_remove)} IPs entfernt.")
-                st.rerun()
-        else:
-            st.info("Keine IPs auf der Whitelist.")
-    except Exception as e:
-        st.error(f"Fehler beim Laden der Whitelist: {e}")
+        # 5. Export
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Sperrliste als CSV exportieren",
+            data=csv,
+            file_name=f"blocklist_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime='text/csv',
+        )
+
+    # 6. Whitelist Section (Enhanced)
+    st.divider()
+    st.subheader("⚪ Whitelist (Ausnahmen)")
+    
+    w_col1, w_col2 = st.columns([1, 2])
+    with w_col1:
+        with st.form("add_whitelist_form", clear_on_submit=True):
+            st.write("**Neu hinzufügen**")
+            w_ip = st.text_input("IP Adresse")
+            w_reason = st.text_input("Notiz", value="Vertrauenswürdig")
+            if st.form_submit_button("Zur Whitelist", use_container_width=True):
+                if w_ip:
+                    add_to_whitelist(w_ip, w_reason)
+                    st.success("Hinzugefügt.")
+                    st.rerun()
+    
+    with w_col2:
+        try:
+            whitelist = get_whitelist()
+            if whitelist:
+                w_df = pd.DataFrame(whitelist)
+                # handle different column names if necessary
+                if "ip_address" in w_df.columns:
+                    w_df.columns = ["IP Adresse", "Notiz", "Hinzugefügt"]
+                
+                st.dataframe(w_df, use_container_width=True, hide_index=True)
+                
+                ips_to_remove = st.multiselect("Von Whitelist entfernen", options=w_df["IP Adresse"].tolist())
+                if st.button("Entfernen", disabled=not ips_to_remove):
+                    for ip in ips_to_remove:
+                        remove_from_whitelist(ip)
+                    st.rerun()
+            else:
+                st.info("Keine Ausnahmen definiert.")
+        except Exception as e:
+            st.error(f"Fehler: {e}")
 
 
 def render_blocking_config():
-    """Render blocking configuration display."""
-    st.subheader("⚙️ Blocking Configuration")
+    """Render blocking configuration display with live update links."""
+    st.subheader("⚙️ Schwellenwerte & Regeln")
+    st.info("Diese Einstellungen können in der Seite 'Settings' geändert werden.")
 
-    col1, col2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Max 404", app_config.max_404_errors)
+    c2.metric("Max 403", app_config.max_403_errors)
+    c3.metric("Max Failed", app_config.max_failed_requests)
 
-    with col1:
-        st.write("**Thresholds:**")
-        st.write(f"- Max 404 Errors: {app_config.max_404_errors}")
-        st.write(f"- Max 403 Errors: {app_config.max_403_errors}")
-        st.write(f"- Max 5xx Errors: {app_config.max_5xx_errors}")
-        st.write(f"- Max Failed Requests: {app_config.max_failed_requests}")
-
-    with col2:
-        st.write("**Settings:**")
-        st.write(f"- Block Duration: {app_config.block_duration}s ({app_config.block_duration // 60}min)")
-        st.write(f"- Blocking Enabled: {app_config.enable_blocking}")
-        st.write(f"- Suspicious Paths: {len(app_config.suspicious_paths)} patterns")
+    st.write("**Aktive Sicherheits-Features:**")
+    sc1, sc2, sc3 = st.columns(3)
+    sc1.checkbox("Auto-Blocking", value=app_config.enable_blocking, disabled=True)
+    sc2.checkbox("Cloudflare Edge", value=app_config.enable_cloudflare, disabled=True)
+    sc3.checkbox("CrowdSec LAPI", value=app_config.enable_crowdsec, disabled=True)
 
     if app_config.suspicious_paths:
-        with st.expander("View Suspicious Paths", expanded=False):
-            for path in app_config.suspicious_paths[:10]:
-                st.code(path, language="text")
-            if len(app_config.suspicious_paths) > 10:
-                st.info(f"... and {len(app_config.suspicious_paths) - 10} more")
+        with st.expander(f"Verdächtige Pfad-Muster ({len(app_config.suspicious_paths)})", expanded=False):
+            st.write(", ".join([f"`{p}`" for p in app_config.suspicious_paths]))

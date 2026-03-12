@@ -646,6 +646,22 @@ def get_blocked_ips(active_only: bool = True) -> List[Tuple]:
             return cur.fetchall()
 
 
+def get_blocklist_with_ai_status() -> List[Dict[str, Any]]:
+    """Get the active blocklist with AI analysis status."""
+    query = """
+        SELECT 
+            b.ip_address, b.reason, b.blocked_at, b.block_until, b.is_manual,
+            (SELECT COUNT(*) FROM ai_analysis a WHERE a.ip_address = b.ip_address) as ai_report_count
+        FROM blocklist b
+        WHERE b.block_until > NOW() AND b.unblocked_at IS NULL
+        ORDER BY b.blocked_at DESC;
+    """
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            cur.execute(query)
+            return cur.fetchall()
+
+
 # Whitelist operations
 def get_whitelist() -> List[Dict[str, Any]]:
     """Get all whitelisted IPs from the database."""
