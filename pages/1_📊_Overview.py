@@ -21,12 +21,23 @@ from src.components import (
 )
 from src.database import get_traffic_count, get_latest_logs
 from src.utils.reports import generate_pdf_report
+from src.utils.health import check_npm_status
 
 def main():
     init_page("Dashboard", "📊")
     st.title("📊 Traffic Übersicht")
     
     handle_sync_button()
+    
+    # System Status
+    with st.expander("🛠️ System Status", expanded=False):
+        status = check_npm_status()
+        cols = st.columns(3)
+        port_labels = {80: "HTTP (80)", 443: "HTTPS (443)", 81: "Admin (81)"}
+        for i, port in enumerate((80, 443, 81)):
+            is_up = status.get(port, False)
+            color = "🟢 Online" if is_up else "🔴 Offline"
+            cols[i].metric(port_labels[port], color)
     
     # Auto-sync on first load
     if "synced" not in st.session_state:
