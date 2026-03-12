@@ -35,7 +35,9 @@ COPY --chown=appuser:appuser src/ ./src/
 COPY --chown=appuser:appuser pages/ ./pages/
 COPY --chown=appuser:appuser run.py .
 COPY --chown=appuser:appuser entrypoint.sh .
-RUN chmod +x entrypoint.sh
+COPY --chown=appuser:appuser entrypoint-ui.sh .
+COPY --chown=appuser:appuser entrypoint-worker.sh .
+RUN chmod +x entrypoint.sh entrypoint-ui.sh entrypoint-worker.sh
 
 USER appuser
 
