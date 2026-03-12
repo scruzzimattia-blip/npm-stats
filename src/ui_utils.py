@@ -36,6 +36,7 @@ def init_page(title: str, icon: str = "🌐"):
     )
     setup_logging()
     init_geoip()
+    init_database()
     app_config.load_dynamic_settings()
     
     if not health_check():

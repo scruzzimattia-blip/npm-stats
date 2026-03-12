@@ -22,8 +22,7 @@ from collections import defaultdict
 
 def sync_logs(since: Optional[datetime] = None) -> int:
     """Synchronize logs to database, only importing new entries."""
-    # Database is initialized lazily or by the caller, 
-    # but we do a health check to ensure connectivity.
+    init_database()
     
     # Cleanup expired blocks once in a while
     try:
