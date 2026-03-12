@@ -31,7 +31,7 @@ def main():
         hosts=selected_hosts,
         start_date=start_date,
         end_date=end_date,
-        limit=10000
+        limit=1000
     )
 
     # Geo Map
