@@ -16,6 +16,9 @@ from src.components import (
 from src.components.maps import render_geo_map
 from src.utils.whois import get_whois_info
 from src.crowdsec import get_crowdsec_manager
+from src.database import get_ai_reports
+from src.ai_analyzer import AIAnalyzer
+from src.config import app_config
 
 def main():
     init_page("IP-Analyse", "🔎")
@@ -95,6 +98,32 @@ def main():
                             st.success("✅ Keine negativen Einträge bei CrowdSec gefunden.")
                 else:
                     st.warning("CrowdSec Integration ist nicht konfiguriert oder deaktiviert.")
+        
+        # AI Analysis Section
+        st.divider()
+        st.subheader("🤖 KI-Verhaltensanalyse (OpenRouter)")
+        
+        ai_reports = get_ai_reports(ip_to_check)
+        if ai_reports:
+            for report in ai_reports:
+                with st.expander(f"KI-Bericht vom {report['analyzed_at'].strftime('%Y-%m-%d %H:%M')} ({report['model']})", expanded=True):
+                    st.markdown(report['report'])
+                    st.caption(f"Bedrohungslevel: {report['threat_level']}")
+        else:
+            st.info("Noch keine KI-Analyse für diese IP vorhanden.")
+            
+        if st.button("🚀 Neue KI-Analyse starten", use_container_width=True):
+            if not app_config.openrouter_api_key:
+                st.error("OpenRouter API Key fehlt in den Einstellungen!")
+            else:
+                with st.spinner("KI analysiert das Verhalten..."):
+                    analyzer = AIAnalyzer()
+                    result = analyzer.analyze_ip(ip_to_check)
+                    if result:
+                        st.success("Analyse abgeschlossen!")
+                        st.rerun()
+                    else:
+                        st.error("Analyse fehlgeschlagen. Prüfe die Logs des npm-ai Containers.")
 
     st.divider()
     render_referer_analysis(df)
