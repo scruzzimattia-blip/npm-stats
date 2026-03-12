@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pytest-mock pandas requests sqlalchemy psycopg[binary] ipwhois
+          pip install pytest pytest-mock pandas requests sqlalchemy "psycopg[binary,pool]" ipwhois geoip2 streamlit streamlit-autorefresh fpdf2 pydeck folium streamlit-folium
           
       - name: Run tests
         run: |
