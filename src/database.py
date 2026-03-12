@@ -194,6 +194,15 @@ def init_database() -> bool:
                     );
                 """)
 
+                # Create whitelist table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS whitelist (
+                        ip_address TEXT PRIMARY KEY,
+                        reason TEXT,
+                        added_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+
                 # Create indexes for blocklist table
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_blocklist_ip ON blocklist (ip_address);")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_blocklist_until ON blocklist (block_until);")
@@ -587,6 +596,45 @@ def get_blocked_ips(active_only: bool = True) -> List[Tuple]:
         with conn.cursor() as cur:
             cur.execute(query)
             return cur.fetchall()
+
+
+# Whitelist operations
+def get_whitelist() -> List[Dict[str, Any]]:
+    """Get all whitelisted IPs from the database."""
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            cur.execute("SELECT ip_address, reason, added_at FROM whitelist ORDER BY added_at DESC;")
+            return cur.fetchall()
+
+
+def add_to_whitelist(ip_address: str, reason: str = "Manual whitelist") -> bool:
+    """Add an IP address to the whitelist."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO whitelist (ip_address, reason, added_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (ip_address) DO UPDATE
+                SET reason = EXCLUDED.reason,
+                    added_at = NOW();
+                """,
+                (ip_address, reason),
+            )
+            # Also remove from blocklist if present
+            cur.execute(
+                "UPDATE blocklist SET unblocked_at = NOW() WHERE ip_address = %s AND unblocked_at IS NULL;",
+                (ip_address,),
+            )
+            return True
+
+
+def remove_from_whitelist(ip_address: str) -> bool:
+    """Remove an IP address from the whitelist."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM whitelist WHERE ip_address = %s;", (ip_address,))
+            return True
 
 
 def cleanup_expired_blocks() -> int:
