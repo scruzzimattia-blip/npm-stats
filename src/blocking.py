@@ -175,6 +175,13 @@ class IPBlocker:
             del self.blocked_ips[ip]
         return dict(self.blocked_ips)
 
+    def get_stats(self) -> Dict:
+        """Get blocking statistics."""
+        return {
+            "total_blocked": len(self.get_blocked_ips()),
+            "whitelisted": len(self.whitelisted_ips),
+        }
+
     def cleanup_old_ips(self, max_age_minutes: int = 60):
         """Cleanup old IPs from memory and DB tracker."""
         cleanup_old_trackers(max_age_minutes)
