@@ -55,6 +55,17 @@ class IPBlocker:
             except Exception as e:
                 logger.error(f"Failed to initialize Cloudflare: {e}")
 
+        # Initialize CrowdSec manager if enabled
+        self._crowdsec = None
+        if app_config.enable_crowdsec:
+            try:
+                from .crowdsec import get_crowdsec_manager
+                self._crowdsec = get_crowdsec_manager()
+                if self._crowdsec:
+                    logger.info("CrowdSec reputation checks enabled")
+            except Exception as e:
+                logger.error(f"Failed to initialize CrowdSec: {e}")
+
     def check_request(
         self, ip: str, status: int, path: str, host: str = ""
     ) -> Optional[str]:
@@ -77,6 +88,12 @@ class IPBlocker:
 
         # Check thresholds
         reason = self._check_thresholds(counts)
+        
+        # Check CrowdSec reputation if not already blocked
+        if not reason and self._crowdsec:
+            if is_suspicious or status >= 400:
+                if self._crowdsec.is_ip_banned(ip):
+                    reason = "Bösartige IP in CrowdSec Datenbank gefunden"
 
         if reason:
             block_until = datetime.now(timezone.utc) + timedelta(seconds=app_config.block_duration)
