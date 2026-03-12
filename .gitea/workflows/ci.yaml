@@ -11,7 +11,7 @@ jobs:
         
       - name: Login to Gitea Registry
         run: |
-          echo "${{ github.token }}" | docker login 192.168.1.41:3000 --username "${{ github.actor }}" --password-stdin
+          echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login 192.168.1.41:3000 --username "${{ github.actor }}" --password-stdin
           
       - name: Build and Push UI
         run: |
