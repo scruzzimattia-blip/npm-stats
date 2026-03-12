@@ -2,16 +2,18 @@
 
 import pandas as pd
 import streamlit as st
-import pydeck as pdk
+import folium
+from streamlit_folium import st_folium
+from folium.plugins import MarkerCluster
 
 
 def render_geo_map(df: pd.DataFrame) -> None:
-    """Render an elegant Heatmap and Scatter map of traffic sources."""
+    """Render a robust Folium map with marker clusters."""
     if df.empty or "latitude" not in df.columns or "longitude" not in df.columns:
         st.info("Keine Geodaten für die Kartenanzeige verfügbar.")
         return
 
-    # Filter out rows without coordinates and group by location
+    # Filter and group
     map_df = df.dropna(subset=["latitude", "longitude"]).copy()
     
     if map_df.empty:
@@ -20,51 +22,28 @@ def render_geo_map(df: pd.DataFrame) -> None:
 
     st.subheader("🌐 Globale Traffic-Verteilung")
     
-    # Aggregate data for points
+    # Create base map
+    m = folium.Map(
+        location=[20, 0], 
+        zoom_start=2,
+        tiles="CartoDB dark_matter" # Clean dark theme
+    )
+    
+    marker_cluster = MarkerCluster().add_to(m)
+    
+    # Aggregate for performance if many points
     agg_df = map_df.groupby(["latitude", "longitude", "city", "country_code"]).size().reset_index(name="count")
     
-    # Heatmap Layer for overall intensity
-    heatmap_layer = pdk.Layer(
-        "HeatmapLayer",
-        map_df,
-        get_position=["longitude", "latitude"],
-        aggregation=pdk.types.String("SUM"),
-        get_weight="1",
-        radius_pixels=30,
-        intensity=1,
-        threshold=0.05,
-        opacity=0.6,
-    )
+    for _, row in agg_df.iterrows():
+        folium.CircleMarker(
+            location=[row["latitude"], row["longitude"]],
+            radius=min(15, 5 + (row["count"] / 100)),
+            popup=f"<b>{row['city']}, {row['country_code']}</b><br>Requests: {row['count']}",
+            color="#ff4b4b",
+            fill=True,
+            fill_color="#ff4b4b",
+            fill_opacity=0.7,
+        ).add_to(marker_cluster)
 
-    # Scatterplot Layer for individual locations
-    scatter_layer = pdk.Layer(
-        "ScatterplotLayer",
-        agg_df,
-        get_position=["longitude", "latitude"],
-        get_color="[255, 75, 75, 180]", # Streamlit Red
-        get_radius="10000 + (count * 500)", # Dynamic radius based on request count
-        radius_min_pixels=3,
-        radius_max_pixels=15,
-        pickable=True,
-    )
-
-    # Set the viewport - zoom out a bit for better overview
-    view_state = pdk.ViewState(
-        latitude=20, # Center more globally
-        longitude=0,
-        zoom=1.2,
-        pitch=0, # Flat map often looks cleaner for overview
-    )
-
-    # Render map with dark style
-    st.pydeck_chart(
-        pdk.Deck(
-            layers=[heatmap_layer, scatter_layer],
-            initial_view_state=view_state,
-            map_style="mapbox://styles/mapbox/dark-v11", # Professional dark theme
-            tooltip={
-                "html": "<b>Ort:</b> {city}, {country_code}<br/><b>Requests:</b> {count}",
-                "style": {"color": "white", "backgroundColor": "#262730", "fontSize": "12px"},
-            },
-        )
-    )
+    # Render map
+    st_folium(m, width="100%", height=500, returned_objects=[])
