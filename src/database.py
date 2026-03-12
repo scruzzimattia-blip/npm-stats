@@ -207,9 +207,52 @@ def init_database() -> bool:
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_blocklist_ip ON blocklist (ip_address);")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_blocklist_until ON blocklist (block_until);")
 
+                # Create AI analysis table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_analysis (
+                        id SERIAL PRIMARY KEY,
+                        ip_address TEXT NOT NULL,
+                        report TEXT NOT NULL,
+                        threat_level TEXT,
+                        model TEXT,
+                        analyzed_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_ai_analysis_ip ON ai_analysis (ip_address);")
+
                 return True
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
+        return False
+
+
+def get_ai_reports(ip_address: str) -> List[Dict[str, Any]]:
+    """Get all AI analysis reports for a specific IP."""
+    query = """
+        SELECT report, threat_level, model, analyzed_at
+        FROM ai_analysis
+        WHERE ip_address = %s
+        ORDER BY analyzed_at DESC;
+    """
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            cur.execute(query, (ip_address,))
+            return cur.fetchall()
+
+
+def add_ai_report(ip_address: str, report: str, threat_level: str, model: str) -> bool:
+    """Save a new AI analysis report to the database."""
+    query = """
+        INSERT INTO ai_analysis (ip_address, report, threat_level, model)
+        VALUES (%s, %s, %s, %s);
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (ip_address, report, threat_level, model))
+            return True
+    except Exception as e:
+        logger.error(f"Failed to save AI report for {ip_address}: {e}")
         return False
 
 
