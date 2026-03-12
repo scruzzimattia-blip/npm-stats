@@ -28,7 +28,7 @@ def main():
 
     # Load data with coordinates
     df = load_traffic_data(
-        hosts=tuple(selected_hosts),
+        hosts=selected_hosts,
         start_date=start_date,
         end_date=end_date,
         limit=10000

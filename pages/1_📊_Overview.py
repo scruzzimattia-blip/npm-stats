@@ -40,7 +40,7 @@ def main():
     # Load data
     total_count = get_traffic_count(hosts=selected_hosts, start_date=start_date, end_date=end_date)
     df = load_traffic_data(
-        hosts=tuple(selected_hosts),
+        hosts=selected_hosts,
         start_date=start_date,
         end_date=end_date,
         limit=10000
@@ -62,8 +62,8 @@ def main():
     render_metrics(df)
     st.divider()
     
-    hourly_summary = _cached_hourly_summary(hosts=tuple(selected_hosts), start_date=start_date, end_date=end_date)
-    top_ips_summary = _cached_top_ips(hosts=tuple(selected_hosts), start_date=start_date, end_date=end_date)
+    hourly_summary = _cached_hourly_summary(hosts=selected_hosts, start_date=start_date, end_date=end_date)
+    top_ips_summary = _cached_top_ips(hosts=selected_hosts, start_date=start_date, end_date=end_date)
 
     render_charts(df, hourly_summary)
     render_top_ips(df, top_ips_summary)
