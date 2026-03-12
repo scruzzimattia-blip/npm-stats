@@ -71,8 +71,14 @@ class AppConfig:
     enable_anomaly_detection: bool = field(default_factory=lambda: os.getenv("ENABLE_ANOMALY_DETECTION", "true").lower() == "true")
     spike_threshold_factor: float = field(default_factory=lambda: float(os.getenv("SPIKE_THRESHOLD_FACTOR", "3.0")))
     spike_min_requests: int = field(default_factory=lambda: int(os.getenv("SPIKE_MIN_REQUESTS", "50")))
+    # CrowdSec settings
+    enable_crowdsec: bool = field(default_factory=lambda: os.getenv("ENABLE_CROWDSEC", "false").lower() == "true")
+    crowdsec_api_url: str = field(default_factory=lambda: os.getenv("CROWDSEC_API_URL", "http://localhost:8080"))
+    crowdsec_api_key: str = field(default_factory=lambda: os.getenv("CROWDSEC_API_KEY", ""))
     # Notification settings
     webhook_url: str = field(default_factory=lambda: os.getenv("WEBHOOK_URL", ""))
+    telegram_bot_token: str = field(default_factory=lambda: os.getenv("TELEGRAM_BOT_TOKEN", ""))
+    telegram_chat_id: str = field(default_factory=lambda: os.getenv("TELEGRAM_CHAT_ID", ""))
     notify_on_block: bool = field(default_factory=lambda: os.getenv("NOTIFY_ON_BLOCK", "true").lower() == "true")
 
     def load_dynamic_settings(self):
