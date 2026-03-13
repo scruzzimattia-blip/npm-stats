@@ -4,9 +4,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /app
 
 # Install project dependencies
-COPY pyproject.toml .
-# We don't have uv.lock yet in the repo unless we run uv lock locally, but the lockfile will be created/used by uv sync
-RUN uv sync --frozen --no-dev --no-install-project || uv sync --no-dev --no-install-project
+COPY pyproject.toml uv.lock .
+RUN uv sync --frozen --no-dev --no-install-project
 
 FROM python:3.12-slim
 

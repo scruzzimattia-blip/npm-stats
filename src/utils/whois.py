@@ -40,14 +40,18 @@ def get_whois_info(ip_address: str) -> Optional[Dict[str, Any]]:
         
         # Extract abuse emails if available
         emails = []
-        objects = results.get("objects", {})
-        for obj_key, obj_val in objects.items():
-            contact = obj_val.get("contact", {})
-            if contact and "email" in contact:
-                for email_info in contact.get("email", []):
-                    email = email_info.get("value")
-                    if email and email not in emails:
-                        emails.append(email)
+        objects = results.get("objects")
+        if objects:
+            for obj_key, obj_val in objects.items():
+                contact = obj_val.get("contact")
+                if contact and "email" in contact:
+                    email_list = contact.get("email")
+                    if isinstance(email_list, list):
+                        for email_info in email_list:
+                            if isinstance(email_info, dict):
+                                email = email_info.get("value")
+                                if email and email not in emails:
+                                    emails.append(email)
                         
         info["abuse_emails"] = emails
         
