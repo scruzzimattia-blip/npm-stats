@@ -76,7 +76,17 @@ class IPBlocker:
         if self._is_whitelisted(ip):
             return None
 
-        # Check suspicious path
+        # 1. Check for immediate ban (Honey-Paths)
+        if self._is_honey_path(path):
+            reason = f"Honey-Path aufgerufen: {path}"
+            # Immediate long-term block (default duration * 24 for 1 day or similar)
+            block_until = datetime.now(timezone.utc) + timedelta(seconds=app_config.block_duration * 24)
+            self._block_ip(ip, reason, block_until)
+            logger.warning(f"INSTANT BLOCK for IP {ip}: {reason}")
+            send_notification(ip, reason, block_until)
+            return reason
+
+        # 2. Regular suspicious path check
         is_suspicious = self._is_suspicious_path(path)
         
         # Update counters in DB and get current totals
@@ -129,6 +139,14 @@ class IPBlocker:
         path_lower = path.lower()
         for suspicious in app_config.suspicious_paths:
             if suspicious.lower() in path_lower:
+                return True
+        return False
+
+    def _is_honey_path(self, path: str) -> bool:
+        """Check if path is a honey path (immediate ban)."""
+        path_lower = path.lower()
+        for honey in app_config.honey_paths:
+            if honey.lower() == path_lower or honey.lower() in path_lower:
                 return True
         return False
 

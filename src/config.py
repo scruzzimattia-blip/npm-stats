@@ -62,6 +62,16 @@ class AppConfig:
         ]
     )
     max_suspicious_paths: int = field(default_factory=lambda: int(os.getenv("MAX_SUSPICIOUS_PATHS", "5")))
+    honey_paths: List[str] = field(
+        default_factory=lambda: [
+            p.strip()
+            for p in os.getenv(
+                "HONEY_PATHS",
+                "/.env,/.git/config,/wp-config.php,/config.php,/backup.sql,/dump.sql",
+            ).split(",")
+            if p.strip()
+        ]
+    )
     use_firewall: bool = field(default_factory=lambda: os.getenv("USE_FIREWALL", "false").lower() == "true")
     # Cloudflare settings
     enable_cloudflare: bool = field(default_factory=lambda: os.getenv("ENABLE_CLOUDFLARE", "false").lower() == "true")

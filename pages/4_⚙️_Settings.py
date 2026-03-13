@@ -59,6 +59,12 @@ def main():
                 value=",".join(app_config.suspicious_paths),
                 help="Pfade, die sofort als verdächtig markiert werden (z.B. /wp-admin)"
             )
+
+            honey_paths = st.text_area(
+                "🍯 Honey-Paths (SOFORT-SPERRE, kommagetrennt)", 
+                value=",".join(app_config.honey_paths),
+                help="Pfade, die bei AUFRUF zur sofortigen permanenten Sperre führen (z.B. /.env)"
+            )
             
             enable_blocking = st.checkbox("Automatisches Blocking Aktiv", value=app_config.enable_blocking)
             
@@ -70,6 +76,7 @@ def main():
                 update_setting("max_suspicious_paths", max_suspicious)
                 update_setting("block_duration", block_dur)
                 update_setting("suspicious_paths", suspicious_paths)
+                update_setting("honey_paths", honey_paths)
                 update_setting("enable_blocking", enable_blocking)
                 st.success("Sicherheitseinstellungen gespeichert!")
                 st.rerun()
