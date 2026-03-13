@@ -15,6 +15,7 @@ from src.database import cleanup_old_data
 from src.log_parser import init_geoip
 from src.sync import sync_logs
 from src.utils import setup_logging
+from src.utils.npm_sync import check_all_hosts_health
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,8 @@ def run_scheduler() -> None:
     init_geoip()
 
     last_cleanup = time.time()
+    last_health_check = 0
+    health_check_interval = 300  # 5 minutes
 
     while not shutdown_requested:
         try:
@@ -59,6 +62,15 @@ def run_scheduler() -> None:
                 logger.info(f"Synced {inserted} new entries in {duration:.2f}s")
             else:
                 logger.debug(f"No new entries (check took {duration:.2f}s)")
+
+            # Periodic host health check
+            if time.time() - last_health_check > health_check_interval:
+                logger.info("Starting host health and SSL check...")
+                try:
+                    check_all_hosts_health()
+                except Exception as e:
+                    logger.error(f"Host health check error: {e}")
+                last_health_check = time.time()
 
             # Periodic cleanup
             if time.time() - last_cleanup > cleanup_interval:

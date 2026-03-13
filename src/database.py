@@ -231,6 +231,18 @@ def init_database() -> bool:
                     );
                 """)
 
+                # Create Host Health table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS host_health (
+                        host TEXT PRIMARY KEY,
+                        is_up BOOLEAN DEFAULT TRUE,
+                        last_check TIMESTAMPTZ DEFAULT NOW(),
+                        status_code INTEGER,
+                        ssl_expiry TIMESTAMPTZ,
+                        response_time FLOAT
+                    );
+                """)
+
                 return True
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
@@ -304,6 +316,37 @@ def remove_asn_block(asn: str) -> bool:
     except Exception as e:
         logger.error(f"Failed to remove ASN block {asn}: {e}")
         return False
+
+
+def update_host_health(host: str, is_up: bool, status_code: int, ssl_expiry: Optional[datetime], response_time: float):
+    """Update health status for a host."""
+    query = """
+        INSERT INTO host_health (host, is_up, status_code, ssl_expiry, response_time, last_check)
+        VALUES (%s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (host) DO UPDATE SET
+            is_up = EXCLUDED.is_up,
+            status_code = EXCLUDED.status_code,
+            ssl_expiry = EXCLUDED.ssl_expiry,
+            response_time = EXCLUDED.response_time,
+            last_check = NOW();
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (host, is_up, status_code, ssl_expiry, response_time))
+            return True
+    except Exception as e:
+        logger.error(f"Failed to update health for {host}: {e}")
+        return False
+
+
+def get_all_host_health() -> List[Dict[str, Any]]:
+    """Get health status for all hosts."""
+    query = "SELECT * FROM host_health ORDER BY host ASC"
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            cur.execute(query)
+            return cur.fetchall()
 
 
 def insert_traffic_batch(rows: List[Tuple]) -> int:

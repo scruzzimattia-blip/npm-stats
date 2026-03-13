@@ -1,9 +1,15 @@
 """Utility to sync and fetch hosts from Nginx Proxy Manager database."""
 
 import logging
+import requests
+import ssl
+import socket
+import time
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from sqlalchemy import create_engine, text
 from ..config import app_config
+from ..database import update_host_health
 
 logger = logging.getLogger(__name__)
 
@@ -55,3 +61,55 @@ def fetch_npm_proxy_hosts() -> List[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Failed to fetch hosts from NPM database: {e}")
         return []
+
+
+def get_ssl_expiry(hostname: str) -> Optional[datetime]:
+    """Get SSL certificate expiry date for a hostname."""
+    try:
+        context = ssl.create_default_context()
+        with socket.create_connection((hostname, 443), timeout=5) as sock:
+            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                cert = ssock.getpeercert()
+                # 'Mar 12 12:00:00 2026 GMT'
+                expiry_str = cert['notAfter']
+                return datetime.strptime(expiry_str, '%b %d %H:%M:%S %Y %Z').replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def check_all_hosts_health():
+    """Iterate through all NPM hosts and check their uptime and SSL."""
+    hosts = fetch_npm_proxy_hosts()
+    if not hosts:
+        return
+
+    for h in hosts:
+        # Check primary domain
+        if not h["domains"]:
+            continue
+        domain = h["domains"][0]
+
+        start_time = time.time()
+        is_up = False
+        status_code = 0
+        ssl_expiry = None
+
+        try:
+            # 1. HTTP/S Check (try https if ssl enabled, else http)
+            url = f"https://{domain}" if h["ssl"] else f"http://{domain}"
+            response = requests.get(url, timeout=10, allow_redirects=True, verify=False)
+            status_code = response.status_code
+            is_up = True if status_code < 500 else False
+
+            # 2. SSL Check
+            if h["ssl"]:
+                ssl_expiry = get_ssl_expiry(domain)
+        except Exception as e:
+            logger.debug(f"Health check failed for {domain}: {e}")
+            is_up = False
+
+        response_time = round(time.time() - start_time, 3)
+
+        # Update DB
+        update_host_health(domain, is_up, status_code, ssl_expiry, response_time)
+

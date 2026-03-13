@@ -125,23 +125,43 @@ def main():
             st.info("Keine Live-Logs verfügbar.")
 
     with tab3:
-        st.subheader("Nginx Proxy Manager Hosts")
+        st.subheader("Nginx Proxy Manager Hosts & Uptime")
         from src.utils.npm_sync import fetch_npm_proxy_hosts
+        from src.database import get_all_host_health
+        
         npm_hosts = fetch_npm_proxy_hosts()
+        health_data = {h['host']: h for h in get_all_host_health()}
         
         if npm_hosts:
-            host_data = []
+            display_data = []
             for h in npm_hosts:
-                host_data.append({
-                    "Domains": ", ".join(h["domains"]),
+                domain = h["domains"][0] if h["domains"] else "Unknown"
+                health = health_data.get(domain, {})
+                
+                status_str = "🟢 UP" if health.get('is_up') else "🔴 DOWN"
+                if not health: status_str = "⚪ NO DATA"
+                
+                ssl_info = "N/A"
+                if h["ssl"]:
+                    expiry = health.get('ssl_expiry')
+                    if expiry:
+                        days_left = (expiry - datetime.now(timezone.utc)).days
+                        ssl_info = f"🔒 {days_left} Tage"
+                    else:
+                        ssl_info = "🔒 Prüfe..."
+                
+                display_data.append({
+                    "Status": status_str,
+                    "Domain": domain,
                     "Forward To": h["forward"],
-                    "Enabled": "✅" if h["enabled"] else "❌",
-                    "SSL": "🔒" if h["ssl"] else "🔓"
+                    "SSL": ssl_info,
+                    "Response": f"{health.get('response_time', 0) * 1000:.0f}ms" if health.get('response_time') else "-",
+                    "Letzter Check": health.get('last_check').strftime('%H:%M') if health.get('last_check') else "-"
                 })
-            st.table(host_data)
+            
+            st.dataframe(display_data, use_container_width=True, hide_index=True)
         else:
             st.info("Keine Hosts gefunden oder NPM Datenbank nicht konfiguriert.")
-            st.caption("Konfiguriere die NPM Datenbank in den Einstellungen, um Hosts automatisch zu erkennen.")
 
 if __name__ == "__main__":
     main()
