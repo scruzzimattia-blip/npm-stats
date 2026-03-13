@@ -1,6 +1,6 @@
 import streamlit as st
 from src.ui_utils import init_page, handle_sync_button, render_common_sidebar
-from src.components.blocking import render_blocked_ips, render_blocking_config
+from src.components.blocking import render_blocked_ips, render_blocking_config, render_asn_blocking
 
 def main():
     init_page("Security", "🚫")
@@ -15,6 +15,7 @@ def main():
     
     with tab1:
         render_blocked_ips()
+        render_asn_blocking()
     
     with tab2:
         render_blocking_config()

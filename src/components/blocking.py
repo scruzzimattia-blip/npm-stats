@@ -15,7 +15,10 @@ from ..database import (
     get_whitelist, 
     add_to_whitelist, 
     remove_from_whitelist,
-    get_blocklist_with_ai_status
+    get_blocklist_with_ai_status,
+    get_asn_blocklist,
+    add_asn_block,
+    remove_asn_block
 )
 from ..utils import format_number
 
@@ -194,6 +197,48 @@ def render_blocked_ips():
                 st.info("Keine Ausnahmen definiert.")
         except Exception as e:
             st.error(f"Fehler: {e}")
+
+
+def render_asn_blocking():
+    """Render the ASN-level network blocking interface."""
+    st.divider()
+    st.subheader("🏢 Netzwerk-Sperren (ASN)")
+    st.info("Sperrt ganze Rechenzentren oder Provider-Netzwerke.")
+    
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        with st.form("add_asn_form", clear_on_submit=True):
+            st.write("**ASN sperren**")
+            asn_val = st.text_input("ASN Nummer", placeholder="z.B. 24940")
+            asn_desc = st.text_input("Beschreibung", placeholder="z.B. Hetzner Online GmbH")
+            asn_reason = st.text_input("Grund", value="Data-Center Blocking")
+            
+            if st.form_submit_button("Netzwerk sperren", use_container_width=True):
+                if asn_val:
+                    add_asn_block(asn_val, asn_desc, asn_reason)
+                    st.success(f"ASN {asn_val} gesperrt.")
+                    # Clear blocker cache
+                    get_blocker().blocked_asns.clear()
+                    st.rerun()
+    
+    with col2:
+        try:
+            asn_list = get_asn_blocklist()
+            if asn_list:
+                asn_df = pd.DataFrame(asn_list)
+                asn_df.columns = ["ASN", "Netzwerk", "Gesperrt am", "Grund"]
+                st.dataframe(asn_df, use_container_width=True, hide_index=True)
+                
+                asns_to_remove = st.multiselect("Sperre aufheben für ASN", options=asn_df["ASN"].tolist())
+                if st.button("ASN freigeben", disabled=not asns_to_remove):
+                    for asn in asns_to_remove:
+                        remove_asn_block(asn)
+                    get_blocker().blocked_asns.clear()
+                    st.rerun()
+            else:
+                st.info("Keine Netzwerk-Sperren aktiv.")
+        except Exception as e:
+            st.error(f"Fehler beim Laden der ASN-Sperrliste: {e}")
 
 
 def render_blocking_config():

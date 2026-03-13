@@ -73,15 +73,31 @@ def main():
                         st.success("Whois-Daten erfolgreich abgerufen!")
                         col_w1, col_w2 = st.columns(2)
                         with col_w1:
-                            st.metric("ASN", whois_data.get("asn", "N/A"))
+                            asn = whois_data.get("asn", "N/A")
+                            st.metric("ASN", asn)
                             st.metric("Country", whois_data.get("asn_country_code", "N/A"))
                         with col_w2:
-                            st.metric("Netzwerk", whois_data.get("network_name", "N/A"))
+                            net_name = whois_data.get("network_name", "N/A")
+                            st.metric("Netzwerk", net_name)
                             st.write("**Abuse Emails:**")
                             for email in whois_data.get("abuse_emails", []):
                                 st.code(email)
                             if not whois_data.get("abuse_emails"):
                                 st.write("Keine Abuse-Emails gefunden.")
+                        
+                        # ASN Blocking Button
+                        if asn != "N/A":
+                            st.divider()
+                            st.warning(f"Sperre das gesamte Netzwerk ({net_name}, ASN {asn})?")
+                            if st.button(f"🚫 ASN {asn} komplett sperren", use_container_width=True):
+                                from src.database import add_asn_block
+                                if add_asn_block(asn, net_name, f"Manuelle Sperre via IP-Analyse ({ip_to_check})"):
+                                    st.success(f"Netzwerk ASN {asn} wurde zur Sperrliste hinzugefügt.")
+                                    # Clear blocker cache
+                                    from src.blocking import get_blocker
+                                    get_blocker().blocked_asns.clear()
+                                else:
+                                    st.error("Fehler beim Sperren des Netzwerks.")
                     else:
                         st.error("Whois-Abfrage fehlgeschlagen oder 'ipwhois' ist nicht installiert.")
         

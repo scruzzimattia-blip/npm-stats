@@ -10,9 +10,11 @@ from .database import (
     reset_request_counters,
     cleanup_old_trackers,
     get_tracked_ip_count,
-    get_whitelist
+    get_whitelist,
+    get_asn_blocklist
 )
 from .notifications import send_notification
+from .utils.whois import get_whois_info
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,8 @@ class IPBlocker:
     def __init__(self, use_firewall: bool = False):
         self.blocked_ips: Dict[str, datetime] = {}  # IP -> block_until (local cache)
         self.whitelisted_ips: Set[str] = set()
+        self.blocked_asns: Set[str] = set()
+        self.ip_asn_cache: Dict[str, str] = {}  # IP -> ASN cache
         self.use_firewall = use_firewall
 
         # Initialize firewall manager if enabled
@@ -75,6 +79,11 @@ class IPBlocker:
 
         if self._is_whitelisted(ip):
             return None
+
+        # 0. Check for ASN block
+        if self._is_asn_blocked(ip):
+            reason = f"ASN ist blockiert (Netzwerk-Sperre)"
+            return reason
 
         # 1. Check for immediate ban (Honey-Paths)
         if self._is_honey_path(path):
@@ -149,6 +158,34 @@ class IPBlocker:
             if honey.lower() == path_lower or honey.lower() in path_lower:
                 return True
         return False
+
+    def _is_asn_blocked(self, ip: str) -> bool:
+        """Check if the IP belongs to a blocked ASN."""
+        # 1. Update blocked ASNs cache periodically (or on first use)
+        if not self.blocked_asns:
+            try:
+                asn_list = get_asn_blocklist()
+                self.blocked_asns = {str(row["asn"]) for row in asn_list}
+            except Exception:
+                pass
+
+        if not self.blocked_asns:
+            return False
+
+        # 2. Get ASN for this IP
+        asn = self.ip_asn_cache.get(ip)
+        if not asn:
+            # Slow lookup, only do once per IP per session
+            try:
+                whois = get_whois_info(ip)
+                if whois and whois.get("asn"):
+                    asn = str(whois["asn"])
+                    self.ip_asn_cache[ip] = asn
+            except Exception:
+                return False
+
+        # 3. Check if ASN is in blocklist
+        return asn in self.blocked_asns
 
     def _is_whitelisted(self, ip: str) -> bool:
         """Check if IP is in whitelist (local cache or DB)."""

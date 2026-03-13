@@ -220,6 +220,17 @@ def init_database() -> bool:
                 """)
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_ai_analysis_ip ON ai_analysis (ip_address);")
 
+                # Create ASN blocklist table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS asn_blocklist (
+                        id SERIAL PRIMARY KEY,
+                        asn TEXT NOT NULL UNIQUE,
+                        description TEXT,
+                        blocked_at TIMESTAMPTZ DEFAULT NOW(),
+                        reason TEXT
+                    );
+                """)
+
                 return True
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
@@ -253,6 +264,45 @@ def add_ai_report(ip_address: str, report: str, threat_level: str, model: str) -
             return True
     except Exception as e:
         logger.error(f"Failed to save AI report for {ip_address}: {e}")
+        return False
+
+
+def get_asn_blocklist() -> List[Dict[str, Any]]:
+    """Get all blocked ASNs."""
+    query = "SELECT asn, description, blocked_at, reason FROM asn_blocklist ORDER BY blocked_at DESC"
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            cur.execute(query)
+            return cur.fetchall()
+
+
+def add_asn_block(asn: str, description: str, reason: str = "Manuelle Sperre") -> bool:
+    """Add an ASN to the blocklist."""
+    query = """
+        INSERT INTO asn_blocklist (asn, description, reason)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (asn) DO UPDATE SET reason = EXCLUDED.reason;
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (str(asn), description, reason))
+            return True
+    except Exception as e:
+        logger.error(f"Failed to block ASN {asn}: {e}")
+        return False
+
+
+def remove_asn_block(asn: str) -> bool:
+    """Remove an ASN from the blocklist."""
+    query = "DELETE FROM asn_blocklist WHERE asn = %s"
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (str(asn),))
+            return True
+    except Exception as e:
+        logger.error(f"Failed to remove ASN block {asn}: {e}")
         return False
 
 
