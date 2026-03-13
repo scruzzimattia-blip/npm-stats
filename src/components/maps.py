@@ -2,13 +2,18 @@
 
 import pandas as pd
 import streamlit as st
+import pydeck as pdk
 import folium
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster
+import os
 
+# Default server coordinates (can be overridden by environment)
+SERVER_LAT = float(os.getenv("SERVER_LAT", "51.1657"))
+SERVER_LON = float(os.getenv("SERVER_LON", "10.4515"))
 
 def render_geo_map(df: pd.DataFrame) -> None:
-    """Render a robust Folium map with marker clusters."""
+    """Render an advanced 3D Threat Map using pydeck."""
     if df.empty or "latitude" not in df.columns or "longitude" not in df.columns:
         st.info("Keine Geodaten für die Kartenanzeige verfügbar.")
         return
@@ -20,30 +25,72 @@ def render_geo_map(df: pd.DataFrame) -> None:
         st.info("Keine gültigen Koordinaten in den aktuellen Daten gefunden.")
         return
 
-    st.subheader("🌐 Globale Traffic-Verteilung")
+    st.subheader("🗺️ Live Threat Map (3D)")
     
-    # Create base map
-    m = folium.Map(
-        location=[20, 0], 
-        zoom_start=2,
-        tiles="CartoDB dark_matter" # Clean dark theme
-    )
-    
-    marker_cluster = MarkerCluster().add_to(m)
-    
-    # Aggregate for performance if many points
+    # 1. Aggregate points for base visualization
     agg_df = map_df.groupby(["latitude", "longitude", "city", "country_code"]).size().reset_index(name="count")
     
-    for _, row in agg_df.iterrows():
-        folium.CircleMarker(
-            location=[row["latitude"], row["longitude"]],
-            radius=min(15, 5 + (row["count"] / 100)),
-            popup=f"<b>{row['city']}, {row['country_code']}</b><br>Requests: {row['count']}",
-            color="#ff4b4b",
-            fill=True,
-            fill_color="#ff4b4b",
-            fill_opacity=0.7,
-        ).add_to(marker_cluster)
+    # 2. Create Arc Data (From Attacker to Server)
+    agg_df["server_lat"] = SERVER_LAT
+    agg_df["server_lon"] = SERVER_LON
+    
+    # Define layers
+    # Hexagon/Heatmap for volume
+    point_layer = pdk.Layer(
+        "ScatterplotLayer",
+        agg_df,
+        get_position=["longitude", "latitude"],
+        get_color="[255, 75, 75, 160]",
+        get_radius="count * 500",
+        radius_min_pixels=5,
+        radius_max_pixels=50,
+        pickable=True,
+    )
 
-    # Render map
-    st_folium(m, width="100%", height=500, returned_objects=[])
+    # Arc Layer for the "Laser Beam" effect
+    arc_layer = pdk.Layer(
+        "ArcLayer",
+        agg_df,
+        get_source_position=["longitude", "latitude"],
+        get_target_position=["server_lon", "server_lat"],
+        get_source_color="[255, 75, 75, 200]",
+        get_target_color="[0, 212, 255, 200]",
+        get_width="1 + (count / 10)",
+        pickable=True,
+    )
+
+    # Target point (Your Server)
+    server_layer = pdk.Layer(
+        "ScatterplotLayer",
+        pd.DataFrame([{"lat": SERVER_LAT, "lon": SERVER_LON}]),
+        get_position=["lon", "lat"],
+        get_color="[0, 212, 255, 255]",
+        get_radius=50000,
+        radius_min_pixels=10,
+        pickable=True,
+    )
+
+    # Set viewport
+    view_state = pdk.ViewState(
+        latitude=20,
+        longitude=0,
+        zoom=1.5,
+        pitch=45,
+        bearing=0
+    )
+
+    # Render deck
+    r = pdk.Deck(
+        layers=[point_layer, arc_layer, server_layer],
+        initial_view_state=view_state,
+        map_style="mapbox://styles/mapbox/dark-v10",
+        tooltip={
+            "html": "<b>Ort:</b> {city}, {country_code}<br/><b>Anfragen:</b> {count}",
+            "style": {"color": "white"}
+        }
+    )
+    
+    st.pydeck_chart(r)
+
+    # Small legend
+    st.caption(f"🔵 Dein Standort ({SERVER_LAT}, {SERVER_LON}) | 🔴 Angreifer-Quellen")
