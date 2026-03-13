@@ -10,10 +10,10 @@ def main():
     
     render_common_sidebar()
 
-    # Create tabs for different setting categories
-    tab_gen, tab_sec, tab_notify, tab_db = st.tabs([
+    tab_gen, tab_sec, tab_ai, tab_notify, tab_db = st.tabs([
         "🏠 Allgemein", 
         "🛡️ Sicherheit & Blocking", 
+        "🤖 AI & KI Analyse",
         "🔔 Benachrichtigungen",
         "📊 Datenbank & Cache"
     ])
@@ -102,6 +102,34 @@ def main():
                 update_setting("crowdsec_api_url", cs_url)
                 update_setting("crowdsec_api_key", cs_key)
                 st.success("CrowdSec-Einstellungen gespeichert!")
+                st.rerun()
+
+    with tab_ai:
+        st.subheader("🤖 KI Verhaltensanalyse (OpenRouter)")
+        st.info("Nutze LLMs (wie Gemini oder DeepSeek) um das Verhalten von verdächtigen IPs tiefgehend zu analysieren.")
+        with st.form("ai_settings"):
+            openrouter_key = st.text_input(
+                "OpenRouter API Key", 
+                value=app_config.openrouter_api_key, 
+                type="password",
+                help="Erforderlich für KI-Analyse. Hole dir einen Key auf openrouter.ai"
+            )
+            ai_model = st.text_input(
+                "KI Modell", 
+                value=app_config.ai_model,
+                help="Standard: google/gemini-2.0-flash-lite:free"
+            )
+            enable_ai_auto = st.checkbox(
+                "Auto-KI-Analyse", 
+                value=app_config.enable_ai_auto_analysis,
+                help="Analysiert jede blockierte IP automatisch im Hintergrund."
+            )
+            
+            if st.form_submit_button("KI-Einstellungen Speichern"):
+                update_setting("openrouter_api_key", openrouter_key)
+                update_setting("ai_model", ai_model)
+                update_setting("enable_ai_auto_analysis", enable_ai_auto)
+                st.success("KI-Einstellungen gespeichert!")
                 st.rerun()
 
     with tab_notify:

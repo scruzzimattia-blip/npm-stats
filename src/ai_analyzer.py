@@ -143,10 +143,12 @@ def run_ai_loop() -> None:
     signal.signal(signal.SIGTERM, handle_signal)
     signal.signal(signal.SIGINT, handle_signal)
     
-    analyzer = AIAnalyzer()
-    
     while not shutdown_requested:
+        # Load latest settings from DB (including API keys)
+        app_config.load_dynamic_settings()
+        
         if app_config.enable_ai_auto_analysis and app_config.openrouter_api_key:
+            analyzer = AIAnalyzer()
             try:
                 # Find IPs that are blocked but have no AI report yet
                 query = """
@@ -168,6 +170,8 @@ def run_ai_loop() -> None:
                     
             except Exception as e:
                 logger.error(f"Error in AI loop: {e}")
+        elif not app_config.openrouter_api_key:
+            logger.debug("AI analysis active but OPENROUTER_API_KEY is missing. Waiting...")
         
         # Wait for next check
         time.sleep(30)
