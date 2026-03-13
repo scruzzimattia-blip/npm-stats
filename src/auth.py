@@ -1,16 +1,35 @@
 """Authentication module for NPM Monitor."""
 
 import logging
+import hashlib
+import os
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from ipaddress import ip_address, ip_network
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import streamlit as st
 
 from .config import app_config
+from .database import get_user, create_user
 
 logger = logging.getLogger(__name__)
+
+def hash_password(password: str) -> str:
+    """Hash a password with a salt."""
+    salt = os.getenv("AUTH_SALT", "default_salt_123")
+    return hashlib.sha256((password + salt).encode()).hexdigest()
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify a password against a hash."""
+    return hash_password(password) == hashed
+
+def create_initial_admin():
+    """Ensure at least one admin user exists based on config."""
+    if not get_user(app_config.auth_username):
+        hashed = hash_password(app_config.auth_password)
+        create_user(app_config.auth_username, hashed, role="admin")
+        logger.info(f"Initial admin user '{app_config.auth_username}' created.")
 
 # Rate limiting storage: IP -> (failed_attempts, first_attempt_time, blocked_until)
 _login_attempts: Dict[str, Tuple[int, datetime, datetime]] = defaultdict(lambda: (0, datetime.now(timezone.utc), datetime.fromtimestamp(0, timezone.utc)))
@@ -128,6 +147,9 @@ def check_auth() -> bool:
         st.error("Access denied: Your IP address is not allowed.")
         return False
     
+    # Initialize initial admin if table is empty
+    create_initial_admin()
+    
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
     
@@ -150,10 +172,11 @@ def check_auth() -> bool:
                 password = st.text_input("Password", type="password", key="auth_password")
                 
                 if st.button("Login", type="primary"):
-                    if (username == app_config.auth_username and 
-                        password == app_config.auth_password):
+                    user = get_user(username)
+                    if user and verify_password(password, user["password_hash"]):
                         _record_successful_attempt(client_ip)
                         st.session_state.authenticated = True
+                        st.session_state.user = user
                         st.rerun()
                     else:
                         _record_failed_attempt(client_ip)

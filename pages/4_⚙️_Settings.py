@@ -10,11 +10,12 @@ def main():
     
     render_common_sidebar()
 
-    tab_gen, tab_sec, tab_ai, tab_notify, tab_db = st.tabs([
+    tab_gen, tab_sec, tab_ai, tab_notify, tab_user, tab_db = st.tabs([
         "🏠 Allgemein", 
         "🛡️ Sicherheit & Blocking", 
         "🤖 AI & KI Analyse",
         "🔔 Benachrichtigungen",
+        "👥 Benutzer",
         "📊 Datenbank & Cache"
     ])
 
@@ -196,6 +197,29 @@ def main():
                 update_setting("notify_on_block", notify)
                 st.success("Alerting-Einstellungen gespeichert!")
                 st.rerun()
+
+    with tab_user:
+        st.subheader("👥 Benutzerverwaltung")
+        from src.database import list_users, create_user
+        from src.auth import hash_password
+        
+        users = list_users()
+        st.write(f"Aktuelle Benutzer: {len(users)}")
+        st.table(users)
+        
+        with st.expander("➕ Neuen Benutzer hinzufügen"):
+            with st.form("new_user_form", clear_on_submit=True):
+                new_name = st.text_input("Benutzername")
+                new_pass = st.text_input("Passwort", type="password")
+                new_role = st.selectbox("Rolle", ["admin", "viewer"])
+                if st.form_submit_button("Erstellen"):
+                    if new_name and new_pass:
+                        hashed = hash_password(new_pass)
+                        if create_user(new_name, hashed, new_role):
+                            st.success(f"Benutzer {new_name} erstellt.")
+                            st.rerun()
+                        else:
+                            st.error("Fehler beim Erstellen (Benutzername evtl. schon vergeben).")
 
     with tab_db:
         st.subheader("Datenbank Status")

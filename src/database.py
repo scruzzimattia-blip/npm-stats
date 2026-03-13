@@ -243,6 +243,17 @@ def init_database() -> bool:
                     );
                 """)
 
+                # Create Users table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        id SERIAL PRIMARY KEY,
+                        username TEXT NOT NULL UNIQUE,
+                        password_hash TEXT NOT NULL,
+                        role TEXT DEFAULT 'viewer',
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+
                 return True
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
@@ -343,6 +354,37 @@ def update_host_health(host: str, is_up: bool, status_code: int, ssl_expiry: Opt
 def get_all_host_health() -> List[Dict[str, Any]]:
     """Get health status for all hosts."""
     query = "SELECT * FROM host_health ORDER BY host ASC"
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            cur.execute(query)
+            return cur.fetchall()
+
+
+def get_user(username: str) -> Optional[Dict[str, Any]]:
+    """Get a user by username."""
+    query = "SELECT * FROM users WHERE username = %s"
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            cur.execute(query, (username,))
+            return cur.fetchone()
+
+
+def create_user(username: str, password_hash: str, role: str = "viewer") -> bool:
+    """Create a new user."""
+    query = "INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s)"
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (username, password_hash, role))
+            return True
+    except Exception as e:
+        logger.error(f"Failed to create user {username}: {e}")
+        return False
+
+
+def list_users() -> List[Dict[str, Any]]:
+    """List all registered users."""
+    query = "SELECT id, username, role, created_at FROM users"
     with get_connection() as conn:
         with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
             cur.execute(query)
