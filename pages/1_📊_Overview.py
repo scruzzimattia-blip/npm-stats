@@ -89,7 +89,7 @@ def main():
     hourly_summary = _cached_hourly_summary(hosts=selected_hosts, start_date=start_date, end_date=end_date)
     top_ips_summary = _cached_top_ips(hosts=selected_hosts, start_date=start_date, end_date=end_date)
 
-    tab1, tab2 = st.tabs(["📊 Übersicht", "🔴 Live Logs"])
+    tab1, tab2, tab3 = st.tabs(["📊 Übersicht", "🔴 Live Logs", "🔄 NPM Hosts"])
     
     with tab1:
         render_charts(df, hourly_summary)
@@ -123,6 +123,25 @@ def main():
             )
         else:
             st.info("Keine Live-Logs verfügbar.")
+
+    with tab3:
+        st.subheader("Nginx Proxy Manager Hosts")
+        from src.utils.npm_sync import fetch_npm_proxy_hosts
+        npm_hosts = fetch_npm_proxy_hosts()
+        
+        if npm_hosts:
+            host_data = []
+            for h in npm_hosts:
+                host_data.append({
+                    "Domains": ", ".join(h["domains"]),
+                    "Forward To": h["forward"],
+                    "Enabled": "✅" if h["enabled"] else "❌",
+                    "SSL": "🔒" if h["ssl"] else "🔓"
+                })
+            st.table(host_data)
+        else:
+            st.info("Keine Hosts gefunden oder NPM Datenbank nicht konfiguriert.")
+            st.caption("Konfiguriere die NPM Datenbank in den Einstellungen, um Hosts automatisch zu erkennen.")
 
 if __name__ == "__main__":
     main()

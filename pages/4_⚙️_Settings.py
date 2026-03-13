@@ -138,6 +138,37 @@ def main():
                 update_setting("enable_ai_auto_analysis", enable_ai_auto)
                 st.success("KI-Einstellungen gespeichert!")
                 st.rerun()
+        
+        st.divider()
+        st.subheader("🔄 NPM Host Auto-Discovery")
+        st.info("Verbindet sich mit der Nginx Proxy Manager Datenbank, um Hosts automatisch zu erkennen.")
+        with st.form("npm_db_settings"):
+            db_type = st.selectbox("DB Typ", ["mysql", "sqlite"], index=0 if app_config.npm_db_type == "mysql" else 1)
+            
+            if db_type == "mysql":
+                c1, c2 = st.columns(2)
+                with c1:
+                    n_host = st.text_input("NPM DB Host", value=app_config.npm_db_host)
+                    n_user = st.text_input("NPM DB User", value=app_config.npm_db_user)
+                with c2:
+                    n_port = st.number_input("NPM DB Port", value=app_config.npm_db_port)
+                    n_pass = st.text_input("NPM DB Passwort", value=app_config.npm_db_password, type="password")
+                n_name = st.text_input("NPM DB Name", value=app_config.npm_db_name)
+                n_sqlite = app_config.npm_db_sqlite_path
+            else:
+                n_sqlite = st.text_input("SQLite Pfad (im Container)", value=app_config.npm_db_sqlite_path)
+                n_host, n_user, n_port, n_pass, n_name = "", "", 3306, "", ""
+
+            if st.form_submit_button("NPM-Verbindung Speichern"):
+                update_setting("npm_db_type", db_type)
+                update_setting("npm_db_host", n_host)
+                update_setting("npm_db_port", n_port)
+                update_setting("npm_db_user", n_user)
+                update_setting("npm_db_password", n_pass)
+                update_setting("npm_db_name", n_name)
+                update_setting("npm_db_sqlite_path", n_sqlite)
+                st.success("NPM-Verbindungseinstellungen gespeichert!")
+                st.rerun()
 
     with tab_notify:
         st.subheader("Alerting Konfiguration")

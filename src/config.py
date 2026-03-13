@@ -94,6 +94,14 @@ class AppConfig:
     openrouter_api_key: str = field(default_factory=lambda: os.getenv("OPENROUTER_API_KEY", ""))
     ai_model: str = field(default_factory=lambda: os.getenv("AI_MODEL", "google/gemini-2.0-flash-lite:free"))
     enable_ai_auto_analysis: bool = field(default_factory=lambda: os.getenv("ENABLE_AI_AUTO_ANALYSIS", "false").lower() == "true")
+    # NPM Database settings (for auto-discovery)
+    npm_db_type: str = field(default_factory=lambda: os.getenv("NPM_DB_TYPE", "mysql"))  # mysql or sqlite
+    npm_db_host: str = field(default_factory=lambda: os.getenv("NPM_DB_HOST", "localhost"))
+    npm_db_port: int = field(default_factory=lambda: int(os.getenv("NPM_DB_PORT", "3306")))
+    npm_db_user: str = field(default_factory=lambda: os.getenv("NPM_DB_USER", "npm"))
+    npm_db_password: str = field(default_factory=lambda: os.getenv("NPM_DB_PASSWORD", ""))
+    npm_db_name: str = field(default_factory=lambda: os.getenv("NPM_DB_NAME", "npm"))
+    npm_db_sqlite_path: str = field(default_factory=lambda: os.getenv("NPM_DB_SQLITE_PATH", "/data/database.sqlite"))
 
     def load_dynamic_settings(self):
         """Load settings from database to override environment variables."""
