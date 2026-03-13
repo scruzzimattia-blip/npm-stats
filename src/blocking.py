@@ -141,6 +141,10 @@ class IPBlocker:
         if counts["count_suspicious"] >= app_config.max_suspicious_paths:
             return f"Suspicious activity detected ({counts['count_suspicious']}/{app_config.max_suspicious_paths} suspicious paths)"
 
+        # Rate Limit Check (total requests per 5 minutes)
+        if counts["total_requests"] >= (app_config.max_requests_per_minute * 5):
+            return f"Rate limit exceeded ({counts['total_requests']} req/5min)"
+
         return None
 
     def _is_suspicious_path(self, path: str) -> bool:

@@ -51,6 +51,7 @@ class AppConfig:
     max_403_errors: int = field(default_factory=lambda: int(os.getenv("MAX_403_ERRORS", "10")))  # per 5 minutes
     max_5xx_errors: int = field(default_factory=lambda: int(os.getenv("MAX_5XX_ERRORS", "50")))  # per 5 minutes
     max_failed_requests: int = field(default_factory=lambda: int(os.getenv("MAX_FAILED_REQUESTS", "100")))  # per 5 minutes
+    max_requests_per_minute: int = field(default_factory=lambda: int(os.getenv("MAX_REQUESTS_PER_MINUTE", "60")))
     suspicious_paths: List[str] = field(
         default_factory=lambda: [
             p.strip()

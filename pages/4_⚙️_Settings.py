@@ -53,6 +53,7 @@ def main():
             with col2:
                 max_failed = st.number_input("Gesamt fehlgeschlagene Requests", value=app_config.max_failed_requests)
                 max_suspicious = st.number_input("Max. verdächtige Pfade", value=app_config.max_suspicious_paths)
+                max_rate = st.number_input("Rate-Limit (Requests/Min)", value=app_config.max_requests_per_minute)
                 block_dur = st.number_input("Sperrdauer (Sekunden)", value=app_config.block_duration, step=60)
             
             suspicious_paths = st.text_area(
@@ -75,6 +76,7 @@ def main():
                 update_setting("max_5xx_errors", max_5xx)
                 update_setting("max_failed_requests", max_failed)
                 update_setting("max_suspicious_paths", max_suspicious)
+                update_setting("max_requests_per_minute", max_rate)
                 update_setting("block_duration", block_dur)
                 update_setting("suspicious_paths", suspicious_paths)
                 update_setting("honey_paths", honey_paths)

@@ -166,10 +166,16 @@ def init_database() -> bool:
                         count_5xx INTEGER DEFAULT 0,
                         count_suspicious INTEGER DEFAULT 0,
                         total_failed INTEGER DEFAULT 0,
+                        total_requests INTEGER DEFAULT 0,
                         last_update TIMESTAMPTZ DEFAULT NOW()
                     );
                 """)
 
+                # Add total_requests column if it doesn't exist (migration)
+                try:
+                    cur.execute("ALTER TABLE request_tracker ADD COLUMN IF NOT EXISTS total_requests INTEGER DEFAULT 0;")
+                except Exception:
+                    pass
                 # Create settings table for dynamic configuration
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS app_settings (
@@ -440,14 +446,15 @@ def update_request_counters(
                 # Insert or Reset
                 cur.execute(
                     """
-                    INSERT INTO request_tracker (ip_address, count_404, count_403, count_5xx, count_suspicious, total_failed, last_update)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO request_tracker (ip_address, count_404, count_403, count_5xx, count_suspicious, total_failed, total_requests, last_update)
+                    VALUES (%s, %s, %s, %s, %s, %s, 1, %s)
                     ON CONFLICT (ip_address) DO UPDATE
                     SET count_404 = EXCLUDED.count_404,
                         count_403 = EXCLUDED.count_403,
                         count_5xx = EXCLUDED.count_5xx,
                         count_suspicious = EXCLUDED.count_suspicious,
                         total_failed = EXCLUDED.total_failed,
+                        total_requests = 1,
                         last_update = EXCLUDED.last_update;
                     """,
                     (ip, is_404, is_403, is_5xx, is_susp, is_failed, now),
@@ -462,12 +469,12 @@ def update_request_counters(
                         count_5xx = count_5xx + %s,
                         count_suspicious = count_suspicious + %s,
                         total_failed = total_failed + %s,
+                        total_requests = total_requests + 1,
                         last_update = %s
                     WHERE ip_address = %s;
                     """,
                     (is_404, is_403, is_5xx, is_susp, is_failed, now, ip),
-                )
-            
+                )            
             # Get updated counts
             cur.execute("SELECT * FROM request_tracker WHERE ip_address = %s;", (ip,))
             return cur.fetchone()
