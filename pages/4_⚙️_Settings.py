@@ -202,8 +202,11 @@ def main():
 
     with tab_user:
         st.subheader("👥 Benutzerverwaltung")
-        from src.database import list_users, create_user
+        from src.database import list_users, create_user, update_user_totp_secret, get_user
         from src.auth import hash_password
+        import pyotp
+        import qrcode
+        from io import BytesBytesIO # wait, I don't need it if qrcode returns a PIL image. Streamlit accepts PIL.
         
         users = list_users()
         st.write(f"Aktuelle Benutzer: {len(users)}")
@@ -222,6 +225,46 @@ def main():
                             st.rerun()
                         else:
                             st.error("Fehler beim Erstellen (Benutzername evtl. schon vergeben).")
+
+        with st.expander("🔐 Zwei-Faktor-Authentifizierung (MFA) einrichten"):
+            current_user = st.session_state.get("user", {})
+            if not current_user:
+                st.warning("Bitte logge dich erneut ein, um MFA zu konfigurieren.")
+            else:
+                db_user = get_user(current_user["username"])
+                
+                if db_user and db_user.get("totp_secret"):
+                    st.success("✅ MFA ist für deinen Account aktiviert.")
+                    if st.button("MFA Deaktivieren", type="primary"):
+                        if update_user_totp_secret(current_user["username"], None):
+                            st.success("MFA wurde deaktiviert.")
+                            st.rerun()
+                else:
+                    st.info("MFA ist aktuell deaktiviert. Generiere einen neuen Code, um es einzurichten.")
+                    if "totp_secret" not in st.session_state:
+                        st.session_state.totp_secret = pyotp.random_base32()
+                    
+                    secret = st.session_state.totp_secret
+                    totp = pyotp.TOTP(secret)
+                    uri = totp.provisioning_uri(name=current_user.get("username", "user"), issuer_name="NPM Monitor")
+                    
+                    st.write("**Schritt 1:** Scanne diesen QR-Code mit einer Authenticator-App (z.B. Google Authenticator, Authy, Aegis).")
+                    
+                    qr = qrcode.make(uri)
+                    st.image(qr.get_image(), width=200)
+                    
+                    st.write(f"Oder gib diesen Code manuell ein: `{secret}`")
+                    
+                    st.write("**Schritt 2:** Gib den aktuellen 6-stelligen Code ein, um die Einrichtung abzuschließen.")
+                    with st.form("verify_mfa"):
+                        code = st.text_input("6-stelliger Code")
+                        if st.form_submit_button("MFA Aktivieren"):
+                            if totp.verify(code):
+                                if update_user_totp_secret(current_user["username"], secret):
+                                    st.success("MFA erfolgreich aktiviert!")
+                                    st.rerun()
+                            else:
+                                st.error("Falscher Code. Bitte versuche es erneut.")
 
     with tab_db:
         st.subheader("Datenbank Status")

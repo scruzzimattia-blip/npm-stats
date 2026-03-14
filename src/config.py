@@ -44,6 +44,9 @@ class AppConfig:
     auth_username: str = field(default_factory=lambda: os.getenv("AUTH_USERNAME", "admin"))
     auth_password: str = field(default_factory=lambda: os.getenv("AUTH_PASSWORD", ""))
     allowed_networks: List[str] = field(default_factory=lambda: os.getenv("ALLOWED_NETWORKS", "127.0.0.1/32").split(","))
+    # Database and Caching
+    redis_url: str = field(default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+    
     # Blocking configuration
     enable_blocking: bool = field(default_factory=lambda: os.getenv("ENABLE_BLOCKING", "true").lower() == "true")
     block_duration: int = field(default_factory=lambda: int(os.getenv("BLOCK_DURATION", "3600")))  # 1 hour

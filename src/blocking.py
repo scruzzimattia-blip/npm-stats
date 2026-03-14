@@ -71,7 +71,7 @@ class IPBlocker:
                 logger.error(f"Failed to initialize CrowdSec: {e}")
 
     def check_request(
-        self, ip: str, status: int, path: str, host: str = ""
+        self, ip: str, status: int, path: str, host: str = "", user_agent: str = ""
     ) -> Optional[str]:
         """Check if a request should trigger blocking using DB for shared state."""
         if not app_config.enable_blocking:
@@ -84,6 +84,24 @@ class IPBlocker:
         if self._is_asn_blocked(ip):
             reason = f"ASN ist blockiert (Netzwerk-Sperre)"
             return reason
+
+        # WAF: User-Agent Check
+        if self._is_malicious_user_agent(user_agent):
+            reason = f"Bösartiger User-Agent erkannt: {user_agent}"
+            block_until = datetime.now(timezone.utc) + timedelta(seconds=app_config.block_duration * 24)
+            self._block_ip(ip, reason, block_until)
+            logger.warning(f"INSTANT BLOCK (WAF) for IP {ip}: {reason}")
+            send_notification(ip, reason, block_until)
+            return reason
+
+        # WAF: SQLi / XSS Check
+        waf_reason = self._check_waf_rules(path)
+        if waf_reason:
+            block_until = datetime.now(timezone.utc) + timedelta(seconds=app_config.block_duration * 24)
+            self._block_ip(ip, waf_reason, block_until)
+            logger.warning(f"INSTANT BLOCK (WAF) for IP {ip}: {waf_reason}")
+            send_notification(ip, waf_reason, block_until)
+            return waf_reason
 
         # 1. Check for immediate ban (Honey-Paths)
         if self._is_honey_path(path):
@@ -123,6 +141,43 @@ class IPBlocker:
             send_notification(ip, reason, block_until)
 
         return reason
+
+    def _is_malicious_user_agent(self, user_agent: str) -> bool:
+        """Check if user agent matches known malicious actors or scanners."""
+        if not user_agent or user_agent == "-":
+            return False
+            
+        ua_lower = user_agent.lower()
+        bad_uas = [
+            "zgrab", "masscan", "nmap", "sqlmap", "nikto", "dirbuster",
+            "netsparker", "wpscan", "nuclei", "censys", "shodan", "mirai",
+            "hello, world"
+        ]
+        return any(bad_ua in ua_lower for bad_ua in bad_uas)
+
+    def _check_waf_rules(self, path: str) -> Optional[str]:
+        """Check for SQLi or XSS patterns in the request path/query."""
+        if not path:
+            return None
+            
+        path_lower = path.lower()
+        
+        # Basic SQLi heuristic
+        sqli_patterns = [
+            "union select", "union all select", "' or '1'='1", '" or "1"="1',
+            "@@version", "information_schema", "sysobjects", "syscolumns"
+        ]
+        if any(pattern in path_lower for pattern in sqli_patterns):
+            return "SQL-Injection Versuch (WAF Heuristik)"
+            
+        # Basic XSS heuristic
+        xss_patterns = [
+            "<script", "%3cscript", "javascript:", "onerror=", "onload=", "alert("
+        ]
+        if any(pattern in path_lower for pattern in xss_patterns):
+            return "XSS Versuch (WAF Heuristik)"
+            
+        return None
 
     def _check_thresholds(self, counts: Dict[str, int]) -> Optional[str]:
         """Check if IP exceeds any threshold based on DB counts."""

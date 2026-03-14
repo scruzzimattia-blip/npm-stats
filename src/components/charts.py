@@ -12,6 +12,8 @@ from ..utils import (
 )
 
 
+import altair as alt
+
 def render_charts(df: pd.DataFrame, hourly_summary: pd.DataFrame = None) -> None:
     """Render traffic charts with optimized hourly summary."""
     if df.empty:
@@ -24,7 +26,7 @@ def render_charts(df: pd.DataFrame, hourly_summary: pd.DataFrame = None) -> None
     with col1:
         gcol1, gcol2 = st.columns([3, 1])
         with gcol1:
-            st.subheader("Requests über Zeit")
+            st.subheader("Requests über Zeit (mit Anomalie-Erkennung)")
         with gcol2:
             selected_granularity = st.selectbox(
                 "Granularität",
@@ -33,15 +35,41 @@ def render_charts(df: pd.DataFrame, hourly_summary: pd.DataFrame = None) -> None
                 label_visibility="collapsed",
             )
         
-        # Use optimized hourly summary if available and hourly granularity selected
+        # Prepare Data
         if hourly_summary is not None and not hourly_summary.empty and selected_granularity == "1 Stunde":
-            # Much faster - pre-aggregated data
-            time_df = hourly_summary.set_index("hour")["request_count"].rename("Requests")
-            st.area_chart(time_df, width="stretch")
+            time_df = hourly_summary.set_index("hour")["request_count"].reset_index()
+            time_df.columns = ["time", "Requests"]
         else:
             bucket = granularity_options[selected_granularity]
-            time_df = df.set_index("time").resample(bucket).size().rename("Requests")
-            st.area_chart(time_df, width="stretch")
+            time_df = df.set_index("time").resample(bucket).size().reset_index()
+            time_df.columns = ["time", "Requests"]
+
+        # Simple Anomaly Detection (Z-Score)
+        if len(time_df) > 3:
+            mean = time_df["Requests"].mean()
+            std = time_df["Requests"].std()
+            time_df["Anomaly"] = time_df["Requests"] > (mean + (3 * std))
+        else:
+            time_df["Anomaly"] = False
+
+        # Build Altair Chart
+        base = alt.Chart(time_df).encode(x=alt.X('time:T', title='Zeit'))
+        
+        area = base.mark_area(opacity=0.5, color='#3182bd').encode(
+            y=alt.Y('Requests:Q', title='Requests')
+        )
+        
+        points = base.mark_circle(size=60).encode(
+            y='Requests:Q',
+            color=alt.condition(
+                alt.datum.Anomaly,
+                alt.value('red'),     # Outliers are red
+                alt.value('transparent') # Normal points are invisible
+            ),
+            tooltip=['time', 'Requests', 'Anomaly']
+        )
+        
+        st.altair_chart(area + points, use_container_width=True)
 
     with col2:
         st.subheader("Statuscodes")

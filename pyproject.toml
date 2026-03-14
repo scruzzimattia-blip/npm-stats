@@ -20,6 +20,12 @@ dependencies = [
     "pydeck>=0.8.0",
     "folium>=0.15.0",
     "streamlit-folium>=0.17.0",
+    "alembic>=1.18.4",
+    "redis>=7.3.0",
+    "pyotp>=2.9.0",
+    "qrcode>=8.2",
+    "prometheus-client>=0.24.1",
+    "watchdog>=6.0.0",
 ]
 
 [dependency-groups]

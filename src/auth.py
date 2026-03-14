@@ -134,6 +134,8 @@ def _record_successful_attempt(ip: str):
         del _login_attempts[ip]
 
 
+import pyotp
+
 def check_auth() -> bool:
     """Check authentication and IP access.
     
@@ -170,10 +172,19 @@ def check_auth() -> bool:
             with col2:
                 username = st.text_input("Username", key="auth_username")
                 password = st.text_input("Password", type="password", key="auth_password")
+                totp_code = st.text_input("MFA Code (falls aktiviert)", key="auth_totp", help="Lass dieses Feld leer, wenn du kein MFA aktiviert hast.")
                 
                 if st.button("Login", type="primary"):
                     user = get_user(username)
                     if user and verify_password(password, user["password_hash"]):
+                        # Check TOTP if enabled
+                        if user.get("totp_secret"):
+                            totp = pyotp.TOTP(user["totp_secret"])
+                            if not totp.verify(totp_code):
+                                st.error("Ungültiger MFA Code.")
+                                _record_failed_attempt(client_ip)
+                                return False
+                                
                         _record_successful_attempt(client_ip)
                         st.session_state.authenticated = True
                         st.session_state.user = user
