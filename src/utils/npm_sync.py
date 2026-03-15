@@ -27,7 +27,6 @@ def get_npm_engine():
 @st.cache_data(ttl=300)
 def fetch_npm_proxy_hosts() -> List[Dict[str, Any]]:
     """Fetch proxy hosts and their SSL status from NPM database."""
-...
     if not app_config.npm_db_password and app_config.npm_db_type == "mysql":
         logger.debug("NPM MySQL password not set, skipping fetch.")
         return []
