@@ -26,6 +26,7 @@ dependencies = [
     "qrcode>=8.2",
     "pillow>=10.2.0",
     "graphviz>=0.20.1",
+    "docker>=7.0.0",
     "prometheus-client>=0.24.1",
     "watchdog>=6.0.0",
     "fastapi>=0.135.1",

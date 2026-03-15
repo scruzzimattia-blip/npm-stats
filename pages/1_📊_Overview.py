@@ -23,6 +23,7 @@ from src.components import (
 from src.database import get_traffic_count, get_latest_logs, get_traffic_spike_metrics
 from src.utils.reports import generate_pdf_report
 from src.config import app_config
+from src.utils.docker_info import get_container_status
 
 def main():
     init_page("Dashboard", "📊")
@@ -114,6 +115,39 @@ def main():
 
     with tab3:
         render_npm_hosts_status()
+        
+        st.divider()
+        st.subheader("📦 Backend Services Status (Docker)")
+        containers = get_container_status()
+        if containers:
+            # Map status to icons
+            for c in containers:
+                if c["status"] == "running":
+                    c["Status"] = "🟢 Running"
+                elif c["status"] == "exited":
+                    c["Status"] = "🔴 Stopped"
+                else:
+                    c["Status"] = f"🟡 {c['status'].title()}"
+                
+                # Health mapping
+                h = c.get("health", "N/A")
+                if h == "healthy": c["Health"] = "✅ Healthy"
+                elif h == "unhealthy": c["Health"] = "❌ Unhealthy"
+                elif h == "starting": c["Health"] = "⏳ Starting"
+                else: c["Health"] = "⚪ N/A"
+
+            c_df = pd.DataFrame(containers)
+            st.dataframe(
+                c_df[["Status", "Health", "name", "image"]],
+                column_config={
+                    "name": "Container Name",
+                    "image": "Image Tag"
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("Keine Docker-Informationen verfügbar. Stelle sicher, dass '/var/run/docker.sock' gemountet ist.")
 
 if __name__ == "__main__":
     main()

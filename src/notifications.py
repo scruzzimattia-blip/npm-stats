@@ -38,8 +38,38 @@ def send_email_notification(subject: str, body: str):
     except Exception as e:
         logger.error(f"Failed to send email notification: {e}")
 
+def send_ntfy_notification(title: str, message: str, priority: str = "default"):
+    """Send a notification via ntfy.sh."""
+    if not app_config.ntfy_topic:
+        return False
+
+    try:
+        url = f"{app_config.ntfy_url.rstrip('/')}/{app_config.ntfy_topic}"
+        headers = {
+            "Title": title,
+            "Priority": priority or app_config.ntfy_priority,
+            "Tags": "no_entry,security"
+        }
+        
+        req = urllib.request.Request(
+            url,
+            data=message.encode("utf-8"),
+            headers=headers,
+            method="POST"
+        )
+        
+        with urllib.request.urlopen(req, timeout=10) as response:
+            if 200 <= response.status < 300:
+                logger.info(f"ntfy notification sent to topic {app_config.ntfy_topic}")
+                return True
+            else:
+                logger.error(f"Failed to send ntfy notification: HTTP {response.status}")
+    except Exception as e:
+        logger.error(f"Error sending ntfy notification: {e}")
+    return False
+
 def send_notification(ip: str, reason: str, block_until: datetime):
-    """Send a notification via webhook (Discord, Slack, Telegram or generic)."""
+    """Send a notification via all configured channels."""
     if not app_config.notify_on_block:
         return False
 
@@ -48,32 +78,40 @@ def send_notification(ip: str, reason: str, block_until: datetime):
     # Common message parts
     title = "🚫 IP Blocked"
     description = (
-        f"**IP Address:** `{ip}`\n"
-        f"**Reason:** {reason}\n"
-        f"**Blocked Until:** {block_until.strftime('%Y-%m-%d %H:%M:%S')}"
+        f"IP Address: {ip}\n"
+        f"Reason: {reason}\n"
+        f"Blocked Until: {block_until.strftime('%Y-%m-%d %H:%M:%S')}"
     )
+    
+    # 1. ntfy.sh (High priority)
+    if app_config.ntfy_topic:
+        if send_ntfy_notification(title, description, "high"):
+            success = True
 
-    # Webhook Notifications (Discord/Slack/Generic)
+    # 2. Webhook (Discord/Slack)
     if app_config.webhook_url:
         try:
             # Discord format (rich embed)
+            formatted_desc = (
+                f"**IP Address:** `{ip}`\n"
+                f"**Reason:** {reason}\n"
+                f"**Blocked Until:** {block_until.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+            
             if "discord.com" in app_config.webhook_url:
                 payload = {
                     "embeds": [
                         {
                             "title": title,
-                            "description": description,
+                            "description": formatted_desc,
                             "color": 15158332,  # Red
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                             "footer": {"text": "NPM Monitor Alert"},
                         }
                     ]
                 }
-            # Generic/Slack format
             else:
-                payload = {
-                    "text": f"*{title}*\n{description}",
-                }
+                payload = {"text": f"*{title}*\n{formatted_desc}"}
 
             data = json.dumps(payload).encode("utf-8")
             req = urllib.request.Request(
@@ -84,14 +122,11 @@ def send_notification(ip: str, reason: str, block_until: datetime):
             
             with urllib.request.urlopen(req, timeout=10) as response:
                 if 200 <= response.status < 300:
-                    logger.info(f"Webhook notification sent for IP {ip}")
                     success = True
-                else:
-                    logger.error(f"Failed to send webhook notification: HTTP {response.status}")
         except Exception as e:
             logger.error(f"Error sending webhook notification: {e}")
 
-    # Telegram Notifications
+    # 3. Telegram
     if app_config.telegram_bot_token and app_config.telegram_chat_id:
         try:
             telegram_msg = f"<b>{title}</b>\n\nIP: <code>{ip}</code>\nGrund: {reason}\nSperre bis: {block_until.strftime('%Y-%m-%d %H:%M:%S')}"
@@ -111,10 +146,7 @@ def send_notification(ip: str, reason: str, block_until: datetime):
             
             with urllib.request.urlopen(req, timeout=10) as response:
                 if 200 <= response.status < 300:
-                    logger.info(f"Telegram notification sent for IP {ip}")
                     success = True
-                else:
-                    logger.error(f"Failed to send Telegram notification: HTTP {response.status}")
         except Exception as e:
             logger.error(f"Error sending Telegram notification: {e}")
 

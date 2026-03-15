@@ -19,20 +19,56 @@ def main():
     # Initialize chat history
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    
+    # Pre-defined prompt trigger
+    if "auto_prompt" in st.session_state and st.session_state.auto_prompt:
+        prompt = st.session_state.auto_prompt
+        del st.session_state.auto_prompt
+        
+        # Add to history
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # Trigger processing loop by displaying and then getting response
+        # (This is handled by the regular chat logic below since prompt is now set)
+    else:
+        prompt = st.chat_input("Frage den Assistenten...")
+
+    # Sidebar actions
+    with st.sidebar:
+        st.divider()
+        st.subheader("⚡ KI Schnell-Aktionen")
+        
+        if st.button("📊 Letzte 24h analysieren", use_container_width=True):
+            st.session_state.auto_prompt = "Führe eine detaillierte Sicherheitsanalyse des Traffics der letzten 24 Stunden durch. Identifiziere die Top 3 Bedrohungen."
+            st.rerun()
+            
+        if st.button("📄 Abuse Report erstellen", use_container_width=True):
+            st.session_state.auto_prompt = "Erstelle einen formellen Abuse-Report Entwurf für die aggressivste IP der letzten Stunde, inklusive technischer Details für den Provider."
+            st.rerun()
+            
+        if st.button("🛡️ Firewall-Check", use_container_width=True):
+            st.session_state.auto_prompt = "Prüfe meine aktuellen Sperrlisten und Schwellwerte. Gibt es Optimierungspotenzial basierend auf den heutigen Angriffsmustern?"
+            st.rerun()
+
+        st.divider()
+        if st.button("🗑️ Chat-Verlauf löschen", use_container_width=True):
+            st.session_state.messages = []
+            st.rerun()
 
     # Display chat history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Chat input
-    if prompt := st.chat_input("Frage den Assistenten..."):
-        # Display user message
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        
-        # Add to history
-        st.session_state.messages.append({"role": "user", "content": prompt})
+    # Chat logic
+    if prompt:
+        # Display user message (if not already displayed by history loop)
+        # Note: Streamlit chat input doesn't clear until rerun, so we need careful logic
+        # but since we append to messages and rerun, it works.
+        if not st.session_state.messages or st.session_state.messages[-1]["content"] != prompt:
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            st.session_state.messages.append({"role": "user", "content": prompt})
 
         # Get AI response
         with st.chat_message("assistant"):
@@ -43,25 +79,7 @@ def main():
         
         # Add to history
         st.session_state.messages.append({"role": "assistant", "content": response})
-
-    # Sidebar actions
-    with st.sidebar:
-        st.divider()
-        if st.button("🗑️ Chat-Verlauf löschen", use_container_width=True):
-            st.session_state.messages = []
-            st.rerun()
-        
-        st.subheader("💡 Beispiel-Fragen")
-        examples = [
-            "Gibt es heute auffällige Scan-Muster?",
-            "Wer ist die aggressivste IP der letzten Stunde?",
-            "Warum wurde die letzte IP gesperrt?",
-            "Zusammenfassung der Bedrohungslage heute."
-        ]
-        for ex in examples:
-            if st.button(ex, use_container_width=True):
-                # Trigger chat via state would be nice, but for now just info
-                st.info(f"Kopiere dies in den Chat: '{ex}'")
+        st.rerun()
 
 if __name__ == "__main__":
     main()

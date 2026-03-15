@@ -55,6 +55,15 @@ def get_whois_info(ip_address: str) -> Optional[Dict[str, Any]]:
                         
         info["abuse_emails"] = emails
         
+        # Add Reputation Insight
+        desc = info.get("asn_description", "").lower()
+        net = info.get("network_name", "").lower()
+        dc_keywords = ["hetzner", "digitalocean", "amazon", "aws", "google", "ovh", "linode", "vultr", "hosting", "cloud", "server", "datacenter"]
+        
+        is_dc = any(kw in desc or kw in net for kw in dc_keywords)
+        info["reputation"] = "Rechenzentrum (Hosting)" if is_dc else "ISP (Privat/Business)"
+        info["is_datacenter"] = is_dc
+        
         return info
     except Exception as e:
         logger.error(f"WHOIS lookup failed for IP {ip_address}: {e}")

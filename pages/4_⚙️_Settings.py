@@ -225,12 +225,21 @@ def main():
             tg_chat = st.text_input("Telegram Chat ID", value=app_config.telegram_chat_id)
             
             st.divider()
+            st.write("**ntfy.sh (Echtzeit-Push)**")
+            ntfy_u = st.text_input("ntfy Server URL", value=app_config.ntfy_url)
+            ntfy_t = st.text_input("ntfy Topic", value=app_config.ntfy_topic, placeholder="mein_geheimes_thema")
+            ntfy_p = st.selectbox("Standard Priorität", ["min", "low", "default", "high", "urgent"], index=2)
+            
+            st.divider()
             notify = st.checkbox("Benachrichtigung bei Blockierung senden", value=app_config.notify_on_block)
             
             if st.form_submit_button("Alerting Speichern"):
                 update_setting("webhook_url", webhook)
                 update_setting("telegram_bot_token", tg_token)
                 update_setting("telegram_chat_id", tg_chat)
+                update_setting("ntfy_url", ntfy_u)
+                update_setting("ntfy_topic", ntfy_t)
+                update_setting("ntfy_priority", ntfy_p)
                 update_setting("notify_on_block", notify)
                 st.success("Alerting-Einstellungen gespeichert!")
                 st.rerun()

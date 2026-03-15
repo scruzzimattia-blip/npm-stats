@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from src.ui_utils import (
     init_page, 
     handle_sync_button, 
@@ -141,6 +142,35 @@ def main():
                         st.rerun()
                     else:
                         st.error("Analyse fehlgeschlagen. Prüfe die Logs des npm-ai Containers.")
+
+    st.divider()
+    st.subheader("🌐 Provider & Netzwerk Verteilung")
+    
+    # Simple ASN aggregation for visualization (using whois info from the top ips summary if we had it, 
+    # but here we can at least show country distribution as a proxy or if we have ASN in DF)
+    # Since WHOIS is expensive, we use the country_code for the chart if ASN is not in DF
+    if not df.empty:
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            st.write("**Top Länder (Traffic)**")
+            country_counts = df["country_code"].value_counts().reset_index()
+            country_counts.columns = ["Land", "Anfragen"]
+            fig_country = px.pie(country_counts.head(10), values="Anfragen", names="Land", hole=0.4,
+                                color_discrete_sequence=px.colors.sequential.RdBu)
+            st.plotly_chart(fig_country, use_container_width=True)
+            
+        with col_c2:
+            st.write("**Fehlerrate nach Land**")
+            error_geo = df.groupby("country_code").agg(
+                total=("status", "count"),
+                errors=("status", lambda x: (x >= 400).sum())
+            ).reset_index()
+            error_geo["Fehlerrate"] = (error_geo["errors"] / error_geo["total"] * 100).round(1)
+            error_geo = error_geo.sort_values("errors", ascending=False).head(10)
+            fig_err = px.bar(error_geo, x="country_code", y="Fehlerrate", color="errors",
+                            labels={"country_code": "Land", "Fehlerrate": "Fehlerrate (%)"},
+                            color_continuous_scale="Reds")
+            st.plotly_chart(fig_err, use_container_width=True)
 
     st.divider()
     render_referer_analysis(df)

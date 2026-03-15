@@ -107,6 +107,10 @@ class AppConfig:
     telegram_bot_token: str = field(default_factory=lambda: os.getenv("TELEGRAM_BOT_TOKEN", ""))
     telegram_chat_id: str = field(default_factory=lambda: os.getenv("TELEGRAM_CHAT_ID", ""))
     notify_on_block: bool = field(default_factory=lambda: os.getenv("NOTIFY_ON_BLOCK", "true").lower() == "true")
+    # ntfy.sh settings
+    ntfy_url: str = field(default_factory=lambda: os.getenv("NTFY_URL", "https://ntfy.sh"))
+    ntfy_topic: str = field(default_factory=lambda: os.getenv("NTFY_TOPIC", ""))
+    ntfy_priority: str = field(default_factory=lambda: os.getenv("NTFY_PRIORITY", "default"))
     # Email / SMTP settings
     smtp_host: str = field(default_factory=lambda: os.getenv("SMTP_HOST", ""))
     smtp_port: int = field(default_factory=lambda: int(os.getenv("SMTP_PORT", "587")))
