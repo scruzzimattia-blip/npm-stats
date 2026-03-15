@@ -33,6 +33,7 @@ dependencies = [
     "uvicorn>=0.41.0",
     "pydantic>=2.12.5",
     "gunicorn>=25.1.0",
+    "python-dotenv>=1.2.2",
 ]
 
 [dependency-groups]

@@ -6,6 +6,10 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import List
 from urllib.parse import quote_plus
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 @dataclass
