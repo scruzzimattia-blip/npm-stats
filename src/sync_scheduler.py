@@ -28,9 +28,9 @@ logger = logging.getLogger(__name__)
 shutdown_requested = False
 
 # Prometheus Metrics
-METRIC_REQUESTS = Counter('npm_requests_total', 'Total number of processed requests')
-METRIC_BLOCKS = Counter('npm_blocks_total', 'Total number of blocked IPs')
-METRIC_SYNC_DUR = Gauge('npm_sync_duration_seconds', 'Time spent in last sync')
+METRIC_REQUESTS = Counter("npm_requests_total", "Total number of processed requests")
+METRIC_BLOCKS = Counter("npm_blocks_total", "Total number of blocked IPs")
+METRIC_SYNC_DUR = Gauge("npm_sync_duration_seconds", "Time spent in last sync")
 
 
 def handle_signal(signum: int, frame) -> None:
@@ -42,11 +42,12 @@ def handle_signal(signum: int, frame) -> None:
 
 class LogEventHandler(FileSystemEventHandler):
     """Event handler for log file modifications."""
+
     def __init__(self):
         self.sync_requested = threading.Event()
 
     def on_modified(self, event):
-        if not event.is_directory and event.src_path.endswith('.log'):
+        if not event.is_directory and event.src_path.endswith(".log"):
             self.sync_requested.set()
 
 
@@ -59,9 +60,15 @@ def run_scheduler() -> None:
     logger.info(f"Starting real-time sync scheduler (cleanup: {cleanup_interval}s)")
 
     # Start Prometheus metrics server
+    prometheus_port = int(os.getenv("PROMETHEUS_PORT", "8000"))
     try:
-        start_http_server(8000)
-        logger.info("Prometheus metrics server started on port 8000")
+        start_http_server(prometheus_port)
+        logger.info(f"Prometheus metrics server started on port {prometheus_port}")
+    except OSError as e:
+        if "Address already in use" in str(e) or e.errno == 98:
+            logger.warning(f"Prometheus port {prometheus_port} already in use, metrics disabled")
+        else:
+            logger.error(f"Failed to start Prometheus server: {e}")
     except Exception as e:
         logger.error(f"Failed to start Prometheus server: {e}")
 
@@ -71,7 +78,7 @@ def run_scheduler() -> None:
 
     # Initialize GeoIP
     init_geoip()
-    
+
     # Setup Watchdog Observer
     event_handler = LogEventHandler()
     observer = Observer()
@@ -86,7 +93,7 @@ def run_scheduler() -> None:
     last_cleanup = time.time()
     last_health_check = time.time()
     health_check_interval = 300  # 5 minutes
-    
+
     # Do an initial sync
     sync_logs()
 
@@ -94,15 +101,15 @@ def run_scheduler() -> None:
         try:
             # Wait for changes, timeout every 1 second to check periodic tasks
             event_handler.sync_requested.wait(timeout=1.0)
-            
+
             # If event was triggered or periodic fallback
             if event_handler.sync_requested.is_set() or not observer.is_alive():
                 event_handler.sync_requested.clear()
-                
+
                 start = time.time()
                 inserted = sync_logs()
                 duration = time.time() - start
-                
+
                 METRIC_SYNC_DUR.set(duration)
                 if inserted > 0:
                     METRIC_REQUESTS.inc(inserted)
@@ -127,12 +134,12 @@ def run_scheduler() -> None:
 
         except Exception as e:
             logger.error(f"Sync error: {e}")
-            time.sleep(1) # Prevent tight loop on crash
+            time.sleep(1)  # Prevent tight loop on crash
 
     if observer.is_alive():
         observer.stop()
         observer.join()
-        
+
     logger.info("Sync scheduler stopped")
 
 

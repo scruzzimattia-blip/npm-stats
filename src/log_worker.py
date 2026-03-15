@@ -26,8 +26,9 @@ logger = logging.getLogger(__name__)
 shutdown_requested = False
 
 # Prometheus Metrics
-METRIC_REQUESTS = Counter('npm_requests_total', 'Total number of processed requests')
-METRIC_SYNC_DUR = Gauge('npm_sync_duration_seconds', 'Time spent in last sync')
+METRIC_REQUESTS = Counter("npm_requests_total", "Total number of processed requests")
+METRIC_SYNC_DUR = Gauge("npm_sync_duration_seconds", "Time spent in last sync")
+
 
 def handle_signal(signum: int, frame) -> None:
     """Handle shutdown signals gracefully."""
@@ -35,14 +36,17 @@ def handle_signal(signum: int, frame) -> None:
     logger.info(f"Received signal {signum}, shutting down log-worker...")
     shutdown_requested = True
 
+
 class LogEventHandler(FileSystemEventHandler):
     """Event handler for log file modifications."""
+
     def __init__(self):
         self.sync_requested = threading.Event()
 
     def on_modified(self, event):
-        if not event.is_directory and event.src_path.endswith('.log'):
+        if not event.is_directory and event.src_path.endswith(".log"):
             self.sync_requested.set()
+
 
 def run_log_worker() -> None:
     """Run the real-time log monitoring loop."""
@@ -50,9 +54,15 @@ def run_log_worker() -> None:
     logger.info("Starting specialized NPM Log Worker (Real-time)")
 
     # Start Prometheus metrics server
+    prometheus_port = int(os.getenv("PROMETHEUS_PORT", "8000"))
     try:
-        start_http_server(8000)
-        logger.info("Prometheus metrics server started on port 8000")
+        start_http_server(prometheus_port)
+        logger.info(f"Prometheus metrics server started on port {prometheus_port}")
+    except OSError as e:
+        if "Address already in use" in str(e) or e.errno == 98:
+            logger.warning(f"Prometheus port {prometheus_port} already in use, metrics disabled")
+        else:
+            logger.error(f"Failed to start Prometheus server: {e}")
     except Exception as e:
         logger.error(f"Failed to start Prometheus server: {e}")
 
@@ -62,12 +72,12 @@ def run_log_worker() -> None:
 
     # Initialize GeoIP
     init_geoip()
-    
+
     # Setup Watchdog Observer
     event_handler = LogEventHandler()
     observer = Observer()
     log_dir = app_config.log_dir
-    
+
     if os.path.exists(log_dir):
         observer.schedule(event_handler, log_dir, recursive=False)
         observer.start()
@@ -85,14 +95,14 @@ def run_log_worker() -> None:
             # Wait for changes or periodic fallback
             timeout = 1.0 if observer.is_alive() else float(sync_interval)
             event_handler.sync_requested.wait(timeout=timeout)
-            
+
             if event_handler.sync_requested.is_set() or not observer.is_alive():
                 event_handler.sync_requested.clear()
-                
+
                 start = time.time()
                 inserted = sync_logs()
                 duration = time.time() - start
-                
+
                 METRIC_SYNC_DUR.set(duration)
                 if inserted > 0:
                     METRIC_REQUESTS.inc(inserted)
@@ -106,6 +116,7 @@ def run_log_worker() -> None:
         observer.stop()
         observer.join()
     logger.info("Log worker stopped")
+
 
 if __name__ == "__main__":
     run_log_worker()

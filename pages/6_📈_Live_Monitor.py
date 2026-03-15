@@ -47,10 +47,10 @@ def main():
                             return "background-color: #3182bd; color: white"
                         return "background-color: #28a745; color: white"
 
-                    styled_df = df[["time", "remote_addr", "method", "host", "path", "status"]].style.applymap(
+                    styled_df = df[["time", "remote_addr", "method", "host", "path", "status"]].style.map(
                         color_status, subset=["status"]
                     )
-                    log_container.dataframe(styled_df, use_container_width=True, hide_index=True)
+                    log_container.dataframe(styled_df, width="stretch", hide_index=True)
 
                 time.sleep(2)
         else:
@@ -58,7 +58,7 @@ def main():
             if not df.empty:
                 st.dataframe(
                     df[["time", "remote_addr", "method", "host", "path", "status"]],
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                 )
 
@@ -113,7 +113,7 @@ def main():
                     dot.edge(ip, host, label=str(row["method"]))
                     dot.edge(host, path_id, label=str(row["status"]))
 
-                st.graphviz_chart(dot, use_container_width=True)
+                st.graphviz_chart(dot, width="stretch")
 
             except ImportError:
                 st.error("Python-Modul 'graphviz' fehlt. Bitte installiere es mit 'pip install graphviz'.")
