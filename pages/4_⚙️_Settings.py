@@ -71,6 +71,8 @@ def main():
 
         st.divider()
         st.subheader("⚖️ Sicherheits-Schwellwerte")
+        st.info("Diese Werte bestimmen, wann eine IP automatisch gesperrt wird (innerhalb von 5 Min).")
+        with st.form("security_settings"):
             col1, col2 = st.columns(2)
             with col1:
                 max_404 = st.number_input("Max. 404 Fehler", value=app_config.max_404_errors)
