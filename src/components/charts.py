@@ -1,5 +1,6 @@
 """Charts components for Streamlit application."""
 
+from typing import Dict, List, Optional
 import pandas as pd
 import streamlit as st
 

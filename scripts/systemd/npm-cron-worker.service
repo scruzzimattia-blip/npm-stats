@@ -1,0 +1,15 @@
+[Unit]
+Description=NPM Monitor Cron Worker (Periodic)
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+User=mattia
+WorkingDirectory=/home/mattia/npm-stats
+EnvironmentFile=/home/mattia/npm-stats/.env
+ExecStart=/home/mattia/npm-stats/.venv/bin/python3 -m src.cron_worker
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

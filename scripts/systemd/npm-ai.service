@@ -1,0 +1,15 @@
+[Unit]
+Description=NPM Monitor AI Analyzer
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+User=mattia
+WorkingDirectory=/home/mattia/npm-stats
+EnvironmentFile=/home/mattia/npm-stats/.env
+ExecStart=/home/mattia/npm-stats/.venv/bin/python3 -m src.ai_analyzer
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

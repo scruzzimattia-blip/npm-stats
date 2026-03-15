@@ -1,0 +1,15 @@
+[Unit]
+Description=NPM Monitor UI (Streamlit)
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+User=mattia
+WorkingDirectory=/home/mattia/npm-stats
+EnvironmentFile=/home/mattia/npm-stats/.env
+ExecStart=/home/mattia/npm-stats/.venv/bin/streamlit run run.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

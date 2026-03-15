@@ -1,0 +1,15 @@
+[Unit]
+Description=NPM Monitor API (FastAPI)
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+User=mattia
+WorkingDirectory=/home/mattia/npm-stats
+EnvironmentFile=/home/mattia/npm-stats/.env
+ExecStart=/home/mattia/npm-stats/.venv/bin/uvicorn src.api.main:app --host 0.0.0.0 --port 8001
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

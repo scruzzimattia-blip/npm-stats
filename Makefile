@@ -1,75 +1,50 @@
-.PHONY: help install test lint format clean docker-build docker-run
+# Makefile for managing standalone NPM Monitor applications
 
-# Default target
+# Load environment variables from .env
+ifneq (,$(wildcard .env))
+    include .env
+    export
+endif
+
+PYTHON = python3
+STREAMLIT = streamlit
+UVICORN = uvicorn
+
+.PHONY: all help ui log-worker cron-worker ai api stop-all
+
 help:
-	@echo "Available targets:"
-	@echo "  install       - Install dependencies using uv"
-	@echo "  install-dev   - Install dev dependencies"
-	@echo "  test          - Run all tests"
-	@echo "  test-cov      - Run tests with coverage"
-	@echo "  lint          - Run linting (ruff)"
-	@echo "  format        - Format code (ruff)"
-	@echo "  format-check  - Check code formatting"
-	@echo "  clean         - Clean build artifacts"
-	@echo "  docker-build  - Build Docker image"
-	@echo "  docker-run    - Run Docker container"
-	@echo "  docker-stop   - Stop Docker container"
-	@echo "  sync          - Sync logs manually"
-	@echo "  validate      - Validate configuration"
+	@echo "Available commands:"
+	@echo "  make ui           - Start the Streamlit Dashboard"
+	@echo "  make log-worker   - Start the Real-time Log Sync Worker"
+	@echo "  make cron-worker  - Start the Periodic Task Worker"
+	@echo "  make ai           - Start the AI Behavior Analyzer"
+	@echo "  make api          - Start the FastAPI Backend"
+	@echo "  make stop-all     - Kill all running monitor processes"
 
-# Install dependencies
-install:
-	uv sync --frozen --no-dev
+ui:
+	@echo "🚀 Starting UI..."
+	$(STREAMLIT) run run.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true
 
-install-dev:
-	uv sync --frozen
+log-worker:
+	@echo "📜 Starting Log Worker..."
+	$(PYTHON) -m src.log_worker
 
-# Run tests
-test:
-	uv run pytest tests/ -v
+cron-worker:
+	@echo "⏰ Starting Cron Worker..."
+	$(PYTHON) -m src.cron_worker
 
-test-cov:
-	uv run pytest tests/ -v --cov=src --cov-report=html --cov-report=term
+ai:
+	@echo "🤖 Starting AI Analyzer..."
+	$(PYTHON) -m src.ai_analyzer
 
-# Linting and formatting
-lint:
-	uv run ruff check src/ tests/
+api:
+	@echo "🔌 Starting API..."
+	$(UVICORN) src.api.main:app --host 0.0.0.0 --port 8001
 
-format:
-	uv run ruff format src/ tests/
-
-format-check:
-	uv run ruff format --check src/ tests/
-
-# Clean build artifacts
-clean:
-	rm -rf .pytest_cache
-	rm -rf htmlcov
-	rm -rf .coverage
-	rm -rf db-data
-	find . -type d -name __pycache__ -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
-
-# Docker commands
-docker-build:
-	docker compose build
-
-docker-run:
-	docker compose up -d
-
-docker-stop:
-	docker compose down
-
-docker-logs:
-	docker compose logs -f npm-monitor
-
-# Application commands
-sync:
-	uv run python -c "from src.sync import sync_logs; sync_logs()"
-
-validate:
-	uv run python -c "from src.config import validate_config_or_exit; validate_config_or_exit()"
-
-# Development server
-dev:
-	uv run streamlit run src/app.py
+stop-all:
+	@echo "🛑 Stopping all processes..."
+	pkill -f "streamlit run run.py" || true
+	pkill -f "python3 -m src.log_worker" || true
+	pkill -f "python3 -m src.cron_worker" || true
+	pkill -f "python3 -m src.ai_analyzer" || true
+	pkill -f "uvicorn src.api.main:app" || true
