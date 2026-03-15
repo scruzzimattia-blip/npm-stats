@@ -93,6 +93,9 @@ def _get_device_type(ua_lower: str) -> str:
     return "Desktop"
 
 
+from functools import lru_cache
+
+@lru_cache(maxsize=10000)
 def parse_user_agent(ua: str) -> dict[str, str | bool]:
     """Parse user agent string into components with categorization."""
     ua_lower = ua.lower() if ua else ""
