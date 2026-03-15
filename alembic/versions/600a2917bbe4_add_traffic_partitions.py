@@ -17,7 +17,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema - create monthly partitions for traffic table."""
-    # Create partitions for 2026
+    # 1. Check if traffic_default has data and move it to a temp table
+    op.execute("CREATE TABLE IF NOT EXISTS traffic_temp (LIKE traffic INCLUDING ALL)")
+    op.execute("INSERT INTO traffic_temp SELECT * FROM traffic_default")
+    op.execute("TRUNCATE traffic_default")
+
+    # 2. Create partitions for 2026
     for month in range(3, 13):
         start_date = f'2026-{month:02d}-01'
         if month == 12:
@@ -27,6 +32,10 @@ def upgrade() -> None:
         
         partition_name = f'traffic_y2026m{month:02d}'
         op.execute(f"CREATE TABLE IF NOT EXISTS {partition_name} PARTITION OF traffic FOR VALUES FROM ('{start_date}') TO ('{end_date}')")
+
+    # 3. Restore data from temp table (it will automatically go into the correct partitions)
+    op.execute("INSERT INTO traffic SELECT * FROM traffic_temp")
+    op.execute("DROP TABLE traffic_temp")
 
 def downgrade() -> None:
     """Downgrade schema - detach partitions (careful, data loss if not moved back to default)."""
