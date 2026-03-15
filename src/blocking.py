@@ -103,13 +103,13 @@ class IPBlocker:
             send_notification(ip, waf_reason, block_until)
             return waf_reason
 
-        # 1. Deceptive Defense: Honey-Paths (1-year ban)
+        # 1. Deceptive Defense: Honey-Paths (Custom/Long-term ban)
         if self._is_honey_path(path):
             reason = f"Honeypot ausgelöst: {path}"
-            # Immediate 1-year block for accessing critical bait paths
-            block_until = datetime.now(timezone.utc) + timedelta(days=365)
+            # Long-term block for accessing critical bait paths
+            block_until = datetime.now(timezone.utc) + timedelta(seconds=app_config.honey_pot_duration)
             self._block_ip(ip, reason, block_until)
-            logger.warning(f"DECEPTIVE DEFENSE: 1-YEAR BLOCK for IP {ip}: {reason}")
+            logger.warning(f"DECEPTIVE DEFENSE: LONG-TERM BLOCK for IP {ip}: {reason}")
             send_notification(ip, reason, block_until)
             return reason
 

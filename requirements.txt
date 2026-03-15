@@ -9,3 +9,6 @@ pymysql>=1.1.0
 cryptography>=42.0.0
 streamlit>=1.30.0
 streamlit-autorefresh>=1.0.1
+pyotp>=2.9.0
+qrcode>=7.4.2
+pillow>=10.0.0

@@ -42,9 +42,35 @@ def main():
                 st.rerun()
 
     with tab_sec:
-        st.subheader("Sicherheits-Schwellwerte")
-        st.info("Diese Werte bestimmen, wann eine IP automatisch gesperrt wird (innerhalb von 5 Min).")
-        with st.form("security_settings"):
+        st.subheader("🛡️ Erweiterte Sicherheit")
+        st.info("Diese Einstellungen erhöhen die Sicherheit deines Dashboards gegen Brute-Force und Scanner.")
+        
+        with st.form("security_hardening"):
+            col_h1, col_h2 = st.columns(2)
+            with col_h1:
+                allowed_nets = st.text_area(
+                    "Erlaubte Netzwerke (IP-Allowlist, kommagetrennt)", 
+                    value=",".join(app_config.allowed_networks),
+                    help="Nur diese IPs dürfen auf das Dashboard zugreifen. Leer lassen für Zugriff von überall (nicht empfohlen)."
+                )
+            with col_h2:
+                honey_dur = st.number_input(
+                    "Honeypot Sperrdauer (Sekunden)", 
+                    value=app_config.honey_pot_duration,
+                    help="Dauer der Sperre, wenn ein Honeypot (z.B. /.env) aufgerufen wird. Standard: 31536000 (1 Jahr)."
+                )
+            
+            enable_auth = st.checkbox("Authentifizierung Erzwingen", value=app_config.enable_auth)
+            
+            if st.form_submit_button("Härtung Speichern"):
+                update_setting("allowed_networks", allowed_nets)
+                update_setting("honey_pot_duration", honey_dur)
+                update_setting("enable_auth", enable_auth)
+                st.success("Sicherheitshärtung gespeichert!")
+                st.rerun()
+
+        st.divider()
+        st.subheader("⚖️ Sicherheits-Schwellwerte")
             col1, col2 = st.columns(2)
             with col1:
                 max_404 = st.number_input("Max. 404 Fehler", value=app_config.max_404_errors)
