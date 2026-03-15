@@ -3,6 +3,7 @@
 import socket
 import logging
 import os
+import streamlit as st
 from typing import Dict
 
 logger = logging.getLogger(__name__)
@@ -11,10 +12,11 @@ def get_npm_host() -> str:
     """Get the NPM host to check, defaults to host.docker.internal or localhost."""
     return os.getenv("NPM_HOST", "host.docker.internal")
 
+@st.cache_data(ttl=60)
 def check_npm_status(host: str = None, ports: tuple = (80, 81, 443)) -> Dict[int, bool]:
     """
     Check if the specified ports are open on the given host.
-    
+...
     Args:
         host: The hostname or IP to check.
         ports: Tuple of ports to check.

@@ -232,7 +232,10 @@ def render_user_agent_analysis(df: pd.DataFrame) -> None:
         # Parse user agents (only unique values, then map back)
         unique_uas = df["user_agent"].dropna().unique()
         ua_map = {ua: parse_user_agent(ua) for ua in unique_uas}
-        ua_data = df["user_agent"].dropna().map(ua_map).apply(pd.Series)
+        
+        # Create DataFrame more efficiently from list of dicts
+        parsed_uas = [ua_map[ua] for ua in df["user_agent"].dropna()]
+        ua_data = pd.DataFrame(parsed_uas)
 
         col1, col2, col3 = st.columns(3)
 

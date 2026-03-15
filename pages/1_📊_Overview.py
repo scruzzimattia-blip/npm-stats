@@ -56,13 +56,11 @@ def main():
             color = "🟢 Online" if is_up else "🔴 Offline"
             cols[i].metric(port_labels[port], color)
 
-    # Auto-sync on first load
-    if "synced" not in st.session_state:
-        sync_logs()
-        st.session_state.synced = True
-
     # Load data
     metrics = _cached_traffic_metrics(hosts=selected_hosts, start_date=start_date, end_date=end_date)
+    
+    if metrics["total_requests"] == 0:
+        st.info("Keine Daten für den gewählten Zeitraum gefunden. Klicke oben rechts auf 🔄 Sync, um aktuelle Logs einzulesen.")
     df = load_traffic_data(
         hosts=selected_hosts,
         start_date=start_date,

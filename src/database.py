@@ -232,19 +232,18 @@ def list_users() -> List[Dict[str, Any]]:
 
 
 def insert_traffic_batch(rows: List[Tuple]) -> int:
-    """Insert traffic records in batch. Returns number of inserted rows."""
+    """Insert traffic records in batch using COPY (much faster than executemany)."""
     if not rows:
         return 0
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            query = """
-                INSERT INTO traffic (time, host, method, path, status, remote_addr,
-                                     user_agent, referer, response_length, country_code, city, scheme, latitude, longitude)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
-            """
-            cur.executemany(query, rows)
-            return cur.rowcount
+            with cur.copy(
+                "COPY traffic (time, host, method, path, status, remote_addr, user_agent, referer, response_length, country_code, city, scheme, latitude, longitude) FROM STDIN"
+            ) as copy:
+                for row in rows:
+                    copy.write_row(row)
+            return len(rows)
 
 
 import redis

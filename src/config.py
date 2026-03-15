@@ -113,9 +113,15 @@ class AppConfig:
     npm_db_password: str = field(default_factory=lambda: os.getenv("NPM_DB_PASSWORD", ""))
     npm_db_name: str = field(default_factory=lambda: os.getenv("NPM_DB_NAME", "npm"))
     npm_db_sqlite_path: str = field(default_factory=lambda: os.getenv("NPM_DB_SQLITE_PATH", "/data/database.sqlite"))
+    _last_load_time: float = field(default=0.0, init=False)
 
-    def load_dynamic_settings(self):
-        """Load settings from database to override environment variables."""
+    def load_dynamic_settings(self, force: bool = False):
+        """Load settings from database to override environment variables (cached for 60s)."""
+        import time
+        now = time.time()
+        if not force and now - self._last_load_time < 60:
+            return
+
         try:
             from .database import get_all_settings
             db_settings = get_all_settings()
@@ -132,6 +138,7 @@ class AppConfig:
                         setattr(self, key, [p.strip() for p in value.split(",") if p.strip()])
                     else:
                         setattr(self, key, value)
+            self._last_load_time = now
         except Exception:
             # Database might not be ready yet
             pass

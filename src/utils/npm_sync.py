@@ -1,10 +1,10 @@
 """Utility to sync and fetch hosts from Nginx Proxy Manager database."""
-
 import logging
 import requests
 import ssl
 import socket
 import time
+import streamlit as st
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from sqlalchemy import create_engine, text
@@ -24,8 +24,10 @@ def get_npm_engine():
             f"{app_config.npm_db_host}:{app_config.npm_db_port}/{app_config.npm_db_name}"
         )
 
+@st.cache_data(ttl=300)
 def fetch_npm_proxy_hosts() -> List[Dict[str, Any]]:
     """Fetch proxy hosts and their SSL status from NPM database."""
+...
     if not app_config.npm_db_password and app_config.npm_db_type == "mysql":
         logger.debug("NPM MySQL password not set, skipping fetch.")
         return []

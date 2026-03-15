@@ -58,7 +58,7 @@ def sync_logs() -> int:
     return inserted
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def load_traffic_data(
     hosts: Optional[List[str]] = None,
     start_date: Optional[datetime] = None,
@@ -76,17 +76,17 @@ def load_traffic_data(
     )
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def _cached_hosts():
     return get_distinct_hosts()
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def _cached_db_info():
     return get_database_info()
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def _cached_hourly_summary(
     hosts: Optional[List[str]] = None,
     start_date: Optional[datetime] = None,
@@ -99,7 +99,7 @@ def _cached_hourly_summary(
     )
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def _cached_top_ips(
     hosts: Optional[List[str]] = None,
     start_date: Optional[datetime] = None,
@@ -114,7 +114,7 @@ def _cached_top_ips(
     )
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def _cached_traffic_metrics(
     hosts: Optional[List[str]] = None,
     start_date: Optional[datetime] = None,

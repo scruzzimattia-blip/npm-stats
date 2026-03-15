@@ -97,6 +97,9 @@ def init_geoip() -> bool:
     if not app_config.enable_geoip:
         return False
 
+    if _geoip_reader is not None:
+        return True
+
     try:
         import geoip2.database
 
