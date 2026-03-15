@@ -29,49 +29,53 @@ class IPBlocker:
         self.blocked_asns: Set[str] = set()
         self.ip_asn_cache: Dict[str, str] = {}  # IP -> ASN cache
         self.use_firewall = use_firewall
+        self._last_list_refresh = 0.0
 
-        # Initialize firewall manager if enabled
-        self._iptables = None
-        if use_firewall:
+    def _refresh_lists_if_needed(self):
+        """Refresh whitelists and blocklists periodically to avoid DB hammering."""
+        import time
+        now = time.time()
+        if now - self._last_list_refresh > 60:  # Refresh every 60 seconds
             try:
-                from .firewall import get_iptables_manager
-
-                self._iptables = get_iptables_manager()
-                if self._iptables.has_permissions:
-                    logger.info("Firewall-level blocking enabled (iptables)")
-                    self._iptables.create_chain()
-                else:
-                    logger.warning("Firewall permissions not available, using application-level blocking only")
-                    self.use_firewall = False
+                # Refresh whitelist
+                whitelist = get_whitelist()
+                self.whitelisted_ips = {row["ip_address"] for row in whitelist}
+                
+                # Refresh ASN blocklist
+                asn_list = get_asn_blocklist()
+                self.blocked_asns = {row["asn"] for row in asn_list}
+                
+                self._last_list_refresh = now
             except Exception as e:
-                logger.error(f"Failed to initialize iptables: {e}")
-                self.use_firewall = False
+                logger.error(f"Failed to refresh blocking lists: {e}")
 
-        # Initialize Cloudflare manager if enabled
-        self._cloudflare = None
-        if app_config.enable_cloudflare:
+    def _is_asn_blocked(self, ip: str) -> bool:
+        """Check if IP belongs to a blocked ASN."""
+        self._refresh_lists_if_needed()
+        if not self.blocked_asns:
+            return False
+
+        # Get ASN for this IP
+        asn = self.ip_asn_cache.get(ip)
+        if not asn:
+            # Slow lookup, only do once per IP per session
             try:
-                from .cloudflare_waf import get_cloudflare_manager
-                self._cloudflare = get_cloudflare_manager()
-                if self._cloudflare:
-                    logger.info("Cloudflare-level blocking enabled")
-                else:
-                    logger.warning("Cloudflare enabled but manager could not be initialized (check API credentials)")
-            except Exception as e:
-                logger.error(f"Failed to initialize Cloudflare: {e}")
+                whois = get_whois_info(ip)
+                if whois and whois.get("asn"):
+                    asn = str(whois["asn"])
+                    self.ip_asn_cache[ip] = asn
+            except Exception:
+                return False
 
-        # Initialize CrowdSec manager if enabled
-        self._crowdsec = None
-        if app_config.enable_crowdsec:
-            try:
-                from .crowdsec import get_crowdsec_manager
-                self._crowdsec = get_crowdsec_manager()
-                if self._crowdsec:
-                    logger.info("CrowdSec reputation checks enabled")
-            except Exception as e:
-                logger.error(f"Failed to initialize CrowdSec: {e}")
+        # Check if ASN is in blocklist
+        return asn in self.blocked_asns
 
-    def check_request(
+    def _is_whitelisted(self, ip: str) -> bool:
+        """Check if IP is in whitelist (local cache or DB)."""
+        self._refresh_lists_if_needed()
+        return ip in self.whitelisted_ips
+
+    def _block_ip(self, ip: str, reason: str, block_until: datetime):
         self, ip: str, status: int, path: str, host: str = "", user_agent: str = "", country_code: Optional[str] = None
     ) -> Optional[str]:
         """Check if a request should trigger blocking using DB for shared state."""
