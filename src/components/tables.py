@@ -181,3 +181,45 @@ def render_request_log(df: pd.DataFrame) -> None:
         )
 
         st.caption(f"Zeige {start_idx + 1}-{end_idx} von {format_number(total_rows)} Einträgen")
+
+
+def render_npm_hosts_status() -> None:
+    """Render Nginx Proxy Manager hosts and their health status."""
+    st.subheader("Nginx Proxy Manager Hosts & Uptime")
+    from ..utils.npm_sync import fetch_npm_proxy_hosts
+    from ..database import get_all_host_health
+    
+    npm_hosts = fetch_npm_proxy_hosts()
+    health_data = {h['host']: h for h in get_all_host_health()}
+    
+    if npm_hosts:
+        display_data = []
+        for h in npm_hosts:
+            domain = h["domains"][0] if h["domains"] else "Unknown"
+            health = health_data.get(domain, {})
+            
+            status_str = "🟢 UP" if health.get('is_up') else "🔴 DOWN"
+            if not health: status_str = "⚪ NO DATA"
+            
+            ssl_info = "N/A"
+            if h["ssl"]:
+                expiry = health.get('ssl_expiry')
+                if expiry:
+                    days_left = (expiry - datetime.now(timezone.utc)).days
+                    ssl_info = f"🔒 {days_left} Tage"
+                else:
+                    ssl_info = "🔒 Prüfe..."
+            
+            display_data.append({
+                "Status": status_str,
+                "Domain": domain,
+                "Forward To": h["forward"],
+                "SSL": ssl_info,
+                "Response": f"{health.get('response_time', 0) * 1000:.0f}ms" if health.get('response_time') else "-",
+                "Letzter Check": health.get('last_check').strftime('%H:%M') if health.get('last_check') else "-"
+            })
+        
+        st.dataframe(display_data, use_container_width=True, hide_index=True)
+    else:
+        st.info("Keine Hosts gefunden oder NPM Datenbank nicht konfiguriert.")
+

@@ -11,7 +11,8 @@ from src.components import (
     render_geo_analysis,
     render_referer_analysis,
     render_user_agent_analysis,
-    render_geo_summary
+    render_geo_summary,
+    render_npm_hosts_status
 )
 from src.components.maps import render_geo_map
 from src.utils.whois import get_whois_info
@@ -143,6 +144,9 @@ def main():
 
     st.divider()
     render_referer_analysis(df)
+    
+    st.divider()
+    render_npm_hosts_status()
 
 if __name__ == "__main__":
     main()
