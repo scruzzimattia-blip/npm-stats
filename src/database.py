@@ -928,3 +928,25 @@ def update_setting(key: str, value: Any) -> bool:
                 (key, str(value)),
             )
             return True
+
+
+def add_audit_log(username: str, action: str, target: str, details: str = ""):
+    """Record an administrative action in the audit log."""
+    query = "INSERT INTO audit_log (username, action, target, details) VALUES (%s, %s, %s, %s);"
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (username, action, target, details))
+            return True
+    except Exception as e:
+        logger.error(f"Failed to add audit log: {e}")
+        return False
+
+
+def get_audit_logs(limit: int = 100) -> List[Dict[str, Any]]:
+    """Get the most recent audit log entries."""
+    query = "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT %s;"
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            cur.execute(query, (limit,))
+            return cur.fetchall()

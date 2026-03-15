@@ -37,9 +37,11 @@ def run_cron_worker() -> None:
 
     cleanup_interval = int(os.getenv("CLEANUP_INTERVAL", "86400"))  # Default: 24h
     health_check_interval = int(os.getenv("HEALTH_CHECK_INTERVAL", "300")) # Default: 5 min
+    firewall_check_interval = 600 # 10 min
 
     last_cleanup = 0 # Run cleanup on start
     last_health_check = 0 # Run health check on start
+    last_firewall_check = 0
 
     while not shutdown_requested:
         now = time.time()
@@ -53,7 +55,19 @@ def run_cron_worker() -> None:
             except Exception as e:
                 logger.error(f"Cron: Host health check error: {e}")
 
-        # 2. Database cleanup and archiving
+        # 2. Firewall Integrity Check
+        from src.config import app_config
+        if app_config.use_firewall and (now - last_firewall_check >= firewall_check_interval):
+            logger.info("Cron: Starting firewall integrity check...")
+            try:
+                from src.firewall import get_iptables_manager
+                manager = get_iptables_manager()
+                manager.verify_integrity()
+                last_firewall_check = now
+            except Exception as e:
+                logger.error(f"Cron: Firewall integrity error: {e}")
+
+        # 3. Database cleanup and archiving
         if now - last_cleanup >= cleanup_interval:
             logger.info("Cron: Starting database cleanup...")
             try:

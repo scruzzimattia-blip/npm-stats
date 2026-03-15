@@ -191,6 +191,33 @@ class IptablesManager:
             logger.error(f"Failed to flush chain: {e}")
             return False
 
+    def verify_integrity(self) -> bool:
+        """Verify that the chain exists and is correctly linked at position 1. Auto-repair if needed."""
+        if not self.has_permissions and not self.use_sudo:
+            return False
+
+        try:
+            # 1. Check if chain exists
+            check_chain = self._run_iptables(["-L", self.CHAIN_NAME, "-n"])
+            if check_chain.returncode != 0:
+                logger.warning(f"Chain {self.CHAIN_NAME} missing! Re-creating...")
+                return self.create_chain()
+
+            # 2. Check if linked in parent chain at position 1
+            check_link = self._run_iptables(["-L", self.parent_chain, "1", "-n"])
+            if self.CHAIN_NAME not in check_link.stdout:
+                logger.warning(f"Chain {self.CHAIN_NAME} is not at position 1 in {self.parent_chain}! Repairing...")
+                # Remove any existing links first to avoid duplicates
+                self._run_iptables(["-D", self.parent_chain, "-j", self.CHAIN_NAME])
+                # Insert at position 1
+                self._run_iptables(["-I", self.parent_chain, "1", "-j", self.CHAIN_NAME])
+                logger.info(f"Successfully repaired link in {self.parent_chain}")
+
+            return True
+        except Exception as e:
+            logger.error(f"Firewall integrity check failed: {e}")
+            return False
+
     def delete_chain(self) -> bool:
         """Delete NPM Monitor chain completely."""
         if not self.has_permissions and not self.use_sudo:
