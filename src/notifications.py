@@ -65,18 +65,29 @@ def send_test_notification() -> bool:
     test_reason = "Dies ist eine Test-Benachrichtigung vom NPM Traffic Monitor."
     test_until = datetime.now(timezone.utc) + __import__("datetime").timedelta(hours=1)
 
-    # We call send_notification directly, but temporarily bypass the notify_on_block check if needed
-    # (actually we just want to see if the configuration works)
+    # Check if any channel is configured
+    any_configured = any([
+        app_config.webhook_url,
+        app_config.telegram_bot_token and app_config.telegram_chat_id,
+        app_config.ntfy_topic,
+        app_config.smtp_host and app_config.smtp_to
+    ])
 
-    # Temporarily force notify_on_block to True for the test
+    if not any_configured:
+        logger.warning("Keine Benachrichtigungskanäle für den Test konfiguriert.")
+        return False
+
+    # Force notify_on_block to True for the test
     original_setting = app_config.notify_on_block
     app_config.notify_on_block = True
     try:
         success = send_notification(test_ip, test_reason, test_until)
         return success
+    except Exception as e:
+        logger.error(f"Kritischer Fehler beim Senden des Test-Alerts: {e}")
+        return False
     finally:
         app_config.notify_on_block = original_setting
-
 
 def send_notification(ip: str, reason: str, block_until: datetime):
     """Send a notification via all configured channels."""
