@@ -16,9 +16,23 @@ class IptablesManager:
     COMMENT_PREFIX = "npm-monitor"
 
     def __init__(self):
-        self.available = self._check_iptables_available()
-        self.has_permissions = self._check_permissions()
-        self.use_sudo = not self.has_permissions
+        # Initialize flags with defaults
+        self.use_sudo = False
+        self.available = False
+        self.has_permissions = False
+
+        # 1. Check if command exists at all
+        try:
+            result = subprocess.run(["iptables", "--version"], capture_output=True, text=True, timeout=2)
+            self.available = (result.returncode == 0)
+        except (subprocess.SubprocessError, FileNotFoundError):
+            self.available = False
+
+        if self.available:
+            # 2. Check if we have direct permissions
+            self.has_permissions = self._check_permissions()
+            # 3. If no direct permissions, assume we need sudo
+            self.use_sudo = not self.has_permissions
 
         # Determine parent chain (INPUT or DOCKER-USER)
         if app_config.iptables_parent_chain:
@@ -27,7 +41,6 @@ class IptablesManager:
             self.parent_chain = "DOCKER-USER"
         else:
             self.parent_chain = "INPUT"
-
     def _run_iptables(self, args: List[str]) -> subprocess.CompletedProcess:
         """Run iptables command with optional sudo."""
         cmd = ["sudo", "iptables"] + args if self.use_sudo else ["iptables"] + args
