@@ -206,7 +206,6 @@ def main():
         from src.auth import hash_password
         import pyotp
         import qrcode
-        from io import BytesBytesIO # wait, I don't need it if qrcode returns a PIL image. Streamlit accepts PIL.
         
         users = list_users()
         st.write(f"Aktuelle Benutzer: {len(users)}")
