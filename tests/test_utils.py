@@ -1,6 +1,5 @@
-import pytest
-from datetime import datetime
-from src.utils import format_number, format_bytes, calculate_error_rate, get_status_category
+from src.utils import calculate_error_rate, format_bytes, format_number, get_status_category
+
 
 def test_format_number():
     assert format_number(100) == "100"

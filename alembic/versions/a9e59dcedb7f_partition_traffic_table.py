@@ -8,8 +8,6 @@ Create Date: 2026-03-14 23:53:48.601376
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
 revision: str = 'a9e59dcedb7f'
@@ -22,7 +20,7 @@ def upgrade() -> None:
     """Upgrade schema."""
     op.execute("ALTER TABLE traffic RENAME TO traffic_old;")
     op.execute("ALTER TABLE traffic_old DROP CONSTRAINT IF EXISTS traffic_pkey;")
-    
+
     op.execute("""
         CREATE TABLE traffic (
             id SERIAL,
@@ -43,11 +41,11 @@ def upgrade() -> None:
             PRIMARY KEY (id, time)
         ) PARTITION BY RANGE (time);
     """)
-    
+
     op.execute("CREATE TABLE traffic_default PARTITION OF traffic DEFAULT;")
     op.execute("INSERT INTO traffic SELECT * FROM traffic_old;")
     op.execute("DROP TABLE traffic_old CASCADE;")
-    
+
     # Recreate indexes on the master table (will cascade to partitions)
     op.execute("CREATE INDEX IF NOT EXISTS idx_traffic_time_p ON traffic (time DESC);")
     op.execute("CREATE INDEX IF NOT EXISTS idx_traffic_host_p ON traffic (host);")
@@ -59,7 +57,7 @@ def downgrade() -> None:
     """Downgrade schema."""
     op.execute("ALTER TABLE traffic RENAME TO traffic_partitioned;")
     op.execute("ALTER TABLE traffic_partitioned DROP CONSTRAINT IF EXISTS traffic_pkey;")
-    
+
     op.execute("""
         CREATE TABLE traffic (
             id SERIAL PRIMARY KEY,

@@ -144,7 +144,7 @@ def _cached_traffic_metrics(
 def render_common_sidebar():
     """Render the standard sidebar and return filter values."""
     from streamlit_autorefresh import st_autorefresh
-    
+
     # Get all sidebar values
     selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query, selected_status = render_sidebar(
         cached_hosts=_cached_hosts,
@@ -157,7 +157,7 @@ def render_common_sidebar():
     # Global Auto-Refresh implementation
     if auto_refresh:
         st_autorefresh(interval=refresh_interval * 1000, key="global_refresh")
-        
+
         # Auto-Sync Logic: If data is older than 2 minutes, sync automatically
         newest = get_newest_timestamp()
         if newest:

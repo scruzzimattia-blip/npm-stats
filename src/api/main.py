@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from src.database import cache_result, get_blocklist_with_ai_status, get_database_info, get_redis, load_traffic_df
+from src.database import get_blocklist_with_ai_status, get_database_info, get_redis, load_traffic_df
 
 app = FastAPI(title="NPM Monitor API", description="Backend API for NPM Monitor Enterprise", version="2.0.0")
 
@@ -61,8 +61,9 @@ async def get_active_blocks():
 async def get_top_ips(limit: int = 10):
     """Get top IP addresses by request count."""
     try:
-        from src.database import get_top_ips_summary
         import json
+
+        from src.database import get_top_ips_summary
 
         # Try Redis cache first
         redis_client = get_redis()

@@ -1,15 +1,14 @@
-import sys
 import os
+import sys
 import unittest
-from unittest.mock import MagicMock, patch
-from datetime import datetime, timezone, timedelta
+from unittest.mock import patch
 
 # Add src to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+
 from src.blocking import IPBlocker
 from src.config import app_config
-import redis
 
 
 class TestBlockingIntegration(unittest.TestCase):

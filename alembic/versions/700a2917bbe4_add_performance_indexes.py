@@ -6,8 +6,8 @@ Create Date: 2026-03-15 11:00:00.000000
 
 """
 from typing import Sequence, Union
+
 from alembic import op
-import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '700a2917bbe4'
@@ -19,10 +19,10 @@ def upgrade() -> None:
     """Upgrade schema - add performance indexes."""
     # Composite index for filtering by host and time (most common Dashboard query)
     op.execute("CREATE INDEX IF NOT EXISTS idx_traffic_host_time ON traffic (host, time DESC)")
-    
+
     # Index for status codes (important for error analysis)
     op.execute("CREATE INDEX IF NOT EXISTS idx_traffic_status ON traffic (status)")
-    
+
     # Index for remote_addr (important for IP analysis and blocking)
     op.execute("CREATE INDEX IF NOT EXISTS idx_traffic_remote_addr ON traffic (remote_addr)")
 

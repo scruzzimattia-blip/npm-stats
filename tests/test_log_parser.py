@@ -1,5 +1,3 @@
-import pytest
-from datetime import datetime
 from src.log_parser import parse_log_line, should_ignore_ip
 
 
