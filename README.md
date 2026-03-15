@@ -1,92 +1,78 @@
-# NPM Monitor 🌐
+# NPM Monitor Enterprise 🌐 🛡️
 
-Ein leistungsstarkes, modernes Multi-Container Monitoring-Dashboard für den **Nginx Proxy Manager (NPM)** mit KI-Unterstützung, CrowdSec-Integration und geografischer 3D-Analyse.
+Ein hochperformantes, KI-gestütztes Security-Ökosystem für den **Nginx Proxy Manager (NPM)**. NPM Monitor schützt deine Infrastruktur durch Echtzeit-Analyse, Täuschungsmanöver (Honeypots) und automatisierte Abwehr auf mehreren Ebenen.
 
-![Version](https://img.shields.io/badge/version-1.6.1-green)
+![Version](https://img.shields.io/badge/version-2.0.0-gold)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
-![Architecture](https://img.shields.io/badge/architecture-Multi--Container-orange)
-![AI](https://img.shields.io/badge/AI-OpenRouter-purple)
+![Architecture](https://img.shields.io/badge/architecture-Microservice--API-orange)
+![AI](https://img.shields.io/badge/AI-Autonomous-purple)
 
-## 🚀 Kern-Features
+## 🚀 Enterprise-Highlights (V2 & V3)
 
-- **🏗️ Multi-Container Architektur**: Getrennte spezialisierte Services für UI (`npm-ui`), Hintergrund-Worker (`npm-worker`) und KI-Analyse (`npm-ai`).
-- **🤖 KI-Verhaltensanalyse & Assistent**: 
-    - Automatische Verhaltensprüfung blockierter IPs via **OpenRouter** (Gemini, DeepSeek).
-    - Interaktiver **KI-Chatbot** zur Abfrage von Log-Zusammenhängen und Sicherheits-Insights.
-- **🛡️ Ganzheitliche Abwehr**: 
-    - **CrowdSec Integration**: Echtzeit-Reputationsprüfung gegen globale Blocklisten.
-    - **Cloudflare WAF**: Automatisches Blocking direkt an der Edge.
-    - **Honey-Paths**: Sofortige permanente Sperre bei Zugriff auf sensible Pfade (z.B. `/.env`).
-    - **ASN-Blocking**: Sperren ganzer Rechenzentren oder Provider-Netzwerke.
-    - **Rate-Limiting**: Intelligenter Schutz vor Flooding und Brute-Force.
-- **📊 Monitoring & Visualisierung**: 
-    - **3D Live Threat Map**: Animierte Weltkarte mit Laser-Strahlen (Attack-Arcs).
-    - **Uptime & SSL Monitor**: Überwachung deiner NPM-Hosts inkl. Zertifikats-Ablaufwarnung.
-    - **NPM Host Discovery**: Automatische Erkennung deiner Proxy-Hosts aus der NPM-Datenbank.
-- **👥 Multi-User Management**: Rollenbasierter Zugriff (Admin/Viewer) mit sicher gehashten Passwörtern.
-- **🔔 Multi-Channel Alerting**: Sofortige Benachrichtigungen via **Telegram**, **Discord** oder **Slack**.
+- **⚡ High-Performance Caching**: Integration von **Redis** für ultraschnelles IP-Tracking und Rate-Limiting. Entlastet die Hauptdatenbank massiv.
+- **📡 FastAPI Backend**: Ein neues, entkoppeltes REST-API-Backend auf Port **8001** für schnellen Datenzugriff und externe Integrationen.
+- **📺 Live Monitor**: Echtzeit-Log-Streaming via Websockets und visuelle Darstellung von Angriffs-Strukturen als **Network Graph**.
+- **🤖 KI-Autonomie & Briefings**: 
+    - **Daily Security Briefing**: Die KI erstellt täglich eine Zusammenfassung der Sicherheitslage.
+    - **JSON-Analysis**: Strukturierte Bedrohungserkennung mit hoher Präzision.
+- **🍯 Deceptive Defense (Honeypots)**: Angreifer, die kritische Pfade wie `/.env` oder `/phpmyadmin` scannen, werden sofort für **1 Jahr** auf allen Ebenen (App, Firewall, Cloudflare) gesperrt.
+- **📈 Skalierbare Daten**: Zeitbasierte **PostgreSQL-Partitionierung** und automatisierte **CSV-Archivierung** für Millionen von Log-Einträgen.
+- **🔐 Hardened Auth**: Unterstützung für **Zwei-Faktor-Authentifizierung (MFA/TOTP)** über das Dashboard.
+- **🔔 Multi-Channel Alerting**: Jetzt inklusive **E-Mail (SMTP)** Unterstützung zusätzlich zu Telegram und Discord.
 
-## 🛠️ Installation & Setup
+## 🛠️ Installation & Enterprise Update
 
-1. **Konfiguration vorbereiten**:
+1. **Konfiguration**:
    ```bash
    cp .env.example .env
-   # WICHTIG: API-Keys (OpenRouter, Cloudflare), DB-Passwörter und Telegram-Daten anpassen!
+   # Neu: REDIS_URL und SMTP-Daten für Enterprise Features ergänzen!
    nano .env
    ```
 
-2. **Stack starten**:
+2. **Stack bauen & starten**:
    ```bash
+   # Da neue Services hinzugefügt wurden, ist ein Build erforderlich:
    docker compose up -d --build
    ```
 
-3. **Dashboard öffnen**: http://localhost:8501
+3. **Dashboard & API**:
+    - **UI**: http://localhost:8501
+    - **API (Swagger)**: http://localhost:8001/docs
 
-## 📦 Service-Struktur
+## 📦 Erweiterte Service-Struktur
 
-| Service | Aufgabe | Port (intern) |
-|---------|---------|---------------|
-| `npm-ui` | Streamlit Dashboard & KI-Assistant | 8501 |
-| `npm-worker` | Log-Parsing, Uptime-Check & Blocking | - |
-| `npm-ai` | Hintergrund-KI-Analyse für blockierte IPs | - |
-| `crowdsec` | Lokale CrowdSec LAPI Security-Engine | 8080 |
-| `shared-postgres` | Zentrale Datenbank (Metriken, Berichte, User) | 5432 |
+| Service | Aufgabe | Port |
+|---------|---------|------|
+| `npm-ui` | Streamlit Dashboard & Live-Graph | 8501 |
+| `npm-api` | FastAPI REST-Backend (Zentrale Datenquelle) | 8001 |
+| `npm-worker` | Echtzeit-Log-Streaming & Blocking | 8000 (Metrics) |
+| `npm-ai` | Hintergrund-KI-Analyse & Daily Briefings | - |
+| `redis` | In-Memory Cache für IP-Tracking & Rate-Limits | 6379 |
+| `shared-postgres` | Partitionierte Hauptdatenbank | 5432 |
 
-## ⚙️ Wichtige Konfigurationen (.env)
+## 🛡️ Die Enterprise-Verteidigungslinien
 
-| Variable | Beschreibung | Standard |
-|----------|--------------|----------|
-| `OPENROUTER_API_KEY` | Key für die KI-Verhaltensanalyse | - |
-| `ENABLE_AI_AUTO_ANALYSIS` | Automatische KI-Prüfung bei jeder Sperre | `false` |
-| `HONEY_PATHS` | Pfade für Sofort-Sperre (kommagetrennt) | `/.env,/.git,...` |
-| `MAX_REQUESTS_PER_MINUTE` | Globales Rate-Limit pro IP | `60` |
-| `NPM_DB_TYPE` | NPM Datenbank-Typ (mysql/sqlite) | `mysql` |
-
-## 🛡️ Die vier Verteidigungslinien
-
-NPM Monitor schützt deinen Server proaktiv in vier Stufen:
-1. **Lokal (Worker)**: Erkennt 404-Flooding, Brute-Force und Honey-Path Zugriffe.
-2. **Community (CrowdSec)**: Nutzt kollektive Intelligenz zur Erkennung bekannter Angreifer.
-3. **KI-Ebene (AI-Analyzer)**: Versteht komplexe Angriffsmuster und Absichten.
-4. **Edge (Cloudflare)**: Stoppt Angriffe, bevor sie deine Leitung belasten.
+1. **Deceptive Defense**: Honeypots fangen Scanner sofort ab (1-Jahr-Sperre).
+2. **Local WAF**: Erkennt SQLi, XSS und bösartige User-Agents in Millisekunden.
+3. **Behavioral AI**: LLMs verstehen die Absicht hinter komplexen Angriffsmustern.
+4. **Edge Defense**: Cloudflare blockt Angriffe, bevor sie deine Bandbreite nutzen.
 
 ## 📂 Projektstruktur
 
 ```
 npm-monitor/
-├── pages/              # UI-Seiten (Overview, Analysis, Blocking, AI-Assistant, Settings)
 ├── src/
-│   ├── ai_analyzer.py  # Hintergrund-KI-Logik
-│   ├── blocking.py     # Zentrale Abwehr-Logik (Honey-Paths, ASN, Rate-Limit)
-│   ├── auth.py         # DB-gestützte Benutzerverwaltung
-│   ├── database.py     # Datenbank-Kern (PostgreSQL)
+│   ├── api/            # FastAPI Backend
+│   ├── ai_analyzer.py  # KI-Logik (JSON-Mode)
+│   ├── blocking.py     # WAF & Honeypot Kern
+│   ├── database.py     # Partitionierung & Archivierung
 │   └── utils/
-│       ├── npm_sync.py # NPM-Datenbank Integration & Uptime-Check
-│       └── ai_assistant.py # Chatbot-Backend
-├── docker-compose.yml  # Multi-Container Stack
-└── pyproject.toml      # Paket-Verwaltung (uv)
+│       ├── briefings.py # KI-Zusammenfassungen
+│       └── reports.py   # PDF-Export
+├── alembic/            # DB-Migrations-Versionen
+└── docker-compose.yml  # Microservice Stack
 ```
 
 ## ⚖️ Lizenz
 
-MIT - Erstellt für maximale Sicherheit und Transparenz deines NPM-Traffics.
+MIT - Entwickelt für höchste Sicherheitsansprüche im Nginx Proxy Manager Umfeld.

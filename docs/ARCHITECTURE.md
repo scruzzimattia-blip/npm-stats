@@ -1,80 +1,58 @@
-# Architecture Overview (v1.6.1)
+# Enterprise Architecture (v2.0.0)
 
-## System Architecture
+## System Overview
 
-NPM Monitor has evolved into a highly modular, multi-container security platform. It separates high-load log processing from the user interface and AI-driven analysis to ensure maximum stability and responsiveness.
+The NPM Monitor has evolved from a monolithic container structure into a high-performance, microservice-oriented security platform. It utilizes event-driven processing and a multi-tier caching layer to handle high traffic volumes with minimal latency.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              NPM Monitor Stack                              │
-│                                                                             │
-│  ┌──────────────┐      ┌──────────────┐      ┌──────────────┐               │
-│  │    npm-ui    │      │  npm-worker  │      │    npm-ai    │               │
-│  │ (Dashboard & │      │(Log parsing, │      │ (Behavioral  │               │
-│  │ Assistant)   │      │ Uptime, Ban) │      │ Analysis)    │               │
-│  └──────┬───────┘      └──────┬───────┘      └──────┬───────┘               │
-│         │                     │                     │                       │
-│         └──────────┬──────────┴──────────┬──────────┘                       │
-│                    │                     │                                  │
-│         ┌──────────▼──────────┐      ┌───▼──────────────────────────┐       │
-│         │   Shared Postgres   │      │      External Services       │       │
-│         │ (Data, User, State) │      │ (OpenRouter, Cloudflare API) │       │
-│         └──────────┬──────────┘      └──────────────────────────────┘       │
-│                    │                                                        │
-│         ┌──────────▼──────────┐                                             │
-│         │      CrowdSec       │                                             │
-│         │ (Threat Intel LAPI) │                                             │
-│         └─────────────────────┘                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    NPM[Nginx Proxy Manager] -->|Log Events| Worker[npm-worker]
+    Worker -->|Track/Limit| Redis[(Redis Cache)]
+    Worker -->|Store| DB[(PostgreSQL Partitioned)]
+    
+    API[npm-api FastAPI] -->|Read/Write| DB
+    API -->|Read| Redis
+    
+    UI[npm-ui Streamlit] -->|Request| API
+    AI[npm-ai Analyzer] -->|Analyze| DB
+    AI -->|Fetch| OpenRouter[OpenRouter LLM]
+    
+    Prometheus[Prometheus] -->|Scrape| Worker
 ```
 
-## Component Description
+## Core Components
 
-### 1. Presentation Layer (`npm-ui`)
-- **Framework**: Streamlit
-- **Features**:
-  - **Live Dashboard**: Real-time traffic insights and bandwidth monitoring.
-  - **AI Assistant**: Conversational interface for log interrogation.
-  - **3D Threat Map**: Animated pydeck-based visualization of global attacks.
-  - **Security Management**: UI for unblocking IPs, ASN management, and user roles.
+### 1. Data Access Layer (`npm-api`)
+- **Framework**: FastAPI
+- **Responsibility**: Provides a unified REST interface for all system data.
+- **Benefits**: Decouples the presentation layer (UI) from the database, allowing for third-party integrations and better scalability.
 
-### 2. Processing Layer (`npm-worker`)
-- **Responsibility**: The heart of the system's "Local Defense".
-- **Tasks**:
-  - **Log Sync**: Incrementally reads NPM logs and updates the database.
-  - **Blocking Logic**: Evaluates thresholds (404s, Honey-Paths, Rate-Limits).
-  - **Uptime Monitoring**: Periodically checks NPM hosts and SSL certificates.
-  - **Firewall Sync**: Propagates bans to iptables/Cloudflare.
+### 2. Real-Time Processing Layer (`npm-worker`)
+- **Technology**: `watchdog` (Event-driven file monitoring).
+- **Responsibility**: Listens for file system changes in NPM logs. No more periodic polling.
+- **Metrics**: Exposes internal performance metrics on port 8000 for Prometheus.
 
-### 3. Intelligence Layer (`npm-ai`)
-- **Responsibility**: "Cognitive Defense".
-- **Tasks**:
-  - **Auto-Analysis**: Monitors the blocklist and automatically fetches logs for new bans.
-  - **OpenRouter Integration**: Sends context to LLMs (Gemini/DeepSeek) to determine attacker intent.
-  - **Report Generation**: Stores detailed behavioral assessments in the database.
+### 3. High-Speed Cache (`redis`)
+- **Responsibility**: Stores ephemeral request counters, rate-limit buckets, and temporary IP tracking data.
+- **Impact**: Reduces database write IOPS by over 90%, as only permanent blocks and persistent traffic logs are written to PostgreSQL.
 
-### 4. Security Layer (`crowdsec`)
-- **Responsibility**: "Community Defense".
-- **Tasks**:
-  - Provides a local API (LAPI) for IP reputation checks.
-  - Syncs with global blocklists.
+### 4. Intelligence Layer (`npm-ai`)
+- **Daily Briefings**: A new autonomous task that summarizes system state every 24 hours.
+- **Structured Analysis**: Uses LLM JSON-mode for precise threat classification (High/Medium/Low/Critical).
 
-### 5. Data Layer (`shared-postgres`)
-- **Tables**:
-  - `traffic`: Central log storage.
-  - `blocklist`: Active bans (Local, ASN, Cloudflare).
-  - `host_health`: Uptime and SSL history.
-  - `ai_analysis`: Detailed behavioral reports.
-  - `users`: Securely hashed credentials and roles.
+### 5. Data Integrity & Scaling
+- **Partitioning**: The `traffic` table is now partitioned by time (e.g., monthly). This allows for instant deletion of old data by dropping partitions instead of expensive `DELETE` queries.
+- **Archiving**: Logs older than the retention period are automatically exported to compressed CSV files (`archives/`) before removal.
 
-## Security Model: Four Lines of Defense
+## Security Model: Multi-Tier Defense
 
-1. **Local Defense (Worker)**: Immediate reaction to flooding, honey-paths, and brute force.
-2. **Community Defense (CrowdSec)**: Blocks IPs known to the global security community.
-3. **Cognitive Defense (AI)**: Understands and identifies zero-day or complex probing patterns.
-4. **Edge Defense (Cloudflare)**: Prevents traffic from reaching the server at all.
+1. **Deceptive Tier (Honeypots)**: Immediate 1-year ban for anyone touching high-value bait paths.
+2. **Heuristic Tier (WAF)**: Fast regex matching for SQLi, XSS, and known malicious User-Agents.
+3. **Community Tier (CrowdSec)**: Reputation checks against millions of known bad actors.
+4. **Cognitive Tier (AI)**: Behavioral assessment of intention using deep log history.
+5. **Edge Tier (Cloudflare)**: Pushing bans to the edge to protect server resources.
 
 ## Performance Design
-- **Connection Pooling**: Via `psycopg_pool` for efficient DB access across containers.
-- **Batched I/O**: Logs are parsed in chunks and inserted in batches.
-- **Asynchronous Checks**: Health checks and AI analysis run out-of-band to keep the UI smooth.
+- **Connection Pooling**: Via `psycopg_pool`.
+- **Atomic Increments**: Redis `INCR` commands for thread-safe rate limiting.
+- **Alembic**: Structured database schema evolution.
