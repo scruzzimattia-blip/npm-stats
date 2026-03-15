@@ -33,6 +33,8 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Copy application
 COPY --chown=appuser:appuser src/ ./src/
 COPY --chown=appuser:appuser pages/ ./pages/
+COPY --chown=appuser:appuser alembic/ ./alembic/
+COPY --chown=appuser:appuser alembic.ini .
 COPY --chown=appuser:appuser run.py .
 COPY --chown=appuser:appuser entrypoint.sh .
 COPY --chown=appuser:appuser entrypoint-ui.sh .

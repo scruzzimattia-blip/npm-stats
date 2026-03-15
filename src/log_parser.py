@@ -328,10 +328,7 @@ def parse_all_logs(limit_per_file: Optional[int] = None, since: Optional[datetim
 
     Uses optimized parallel processing for better performance on multi-core systems.
     """
-    if since and limit_per_file is None:
-        limit = 500
-    else:
-        limit = limit_per_file or app_config.lines_per_file
+    limit = limit_per_file or app_config.lines_per_file
 
     log_files = get_log_files()
     logger.info(f"Found {len(log_files)} log files to process")
