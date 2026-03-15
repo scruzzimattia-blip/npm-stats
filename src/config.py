@@ -78,6 +78,8 @@ class AppConfig:
     )
     use_firewall: bool = field(default_factory=lambda: os.getenv("USE_FIREWALL", "false").lower() == "true")
     honey_pot_duration: int = field(default_factory=lambda: int(os.getenv("HONEY_POT_DURATION", "31536000")))  # Default: 1 year in seconds
+    blocked_countries: List[str] = field(default_factory=lambda: [c.strip().upper() for c in os.getenv("BLOCKED_COUNTRIES", "").split(",") if c.strip()])
+    allow_only_countries: List[str] = field(default_factory=lambda: [c.strip().upper() for c in os.getenv("ALLOW_ONLY_COUNTRIES", "").split(",") if c.strip()])
     # Cloudflare settings
     enable_cloudflare: bool = field(default_factory=lambda: os.getenv("ENABLE_CLOUDFLARE", "false").lower() == "true")
     cloudflare_api_token: str = field(default_factory=lambda: os.getenv("CLOUDFLARE_API_TOKEN", ""))

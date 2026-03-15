@@ -41,13 +41,15 @@ def sync_logs(since: Optional[datetime] = None) -> int:
         blocker = get_blocker(use_firewall=app_config.use_firewall)
         
         # Aggregate failures per IP in this batch to reduce DB calls
-        ip_stats = defaultdict(lambda: {"404": 0, "403": 0, "5xx": 0, "suspicious": 0, "failed": 0, "last_path": "", "last_host": ""})
+        ip_stats = defaultdict(lambda: {"404": 0, "403": 0, "5xx": 0, "suspicious": 0, "failed": 0, "last_path": "", "last_host": "", "last_ua": "", "country_code": ""})
         
         for row in rows:
             ip = row[5] if len(row) > 5 else None
             status = row[4] if len(row) > 4 else None
             path = row[3] if len(row) > 3 else ""
             host = row[1] if len(row) > 1 else ""
+            ua = row[6] if len(row) > 6 else ""
+            country = row[9] if len(row) > 9 else ""
 
             if ip and status:
                 is_suspicious = blocker._is_suspicious_path(path)
@@ -64,25 +66,32 @@ def sync_logs(since: Optional[datetime] = None) -> int:
                 s["failed"] += is_failed
                 s["last_path"] = path
                 s["last_host"] = host
+                s["last_ua"] = ua
+                s["country_code"] = country
 
         # Update DB only once per IP found in batch
         blocked_count = 0
         for ip, stats in ip_stats.items():
-            if stats["failed"] > 0:
-                # If IP is already locally cached as blocked, skip
-                if blocker.is_blocked(ip):
-                    continue
-                    
-                try:
-                    # In this optimized version, we could have a batch-update for counters,
-                    # but for now we just call it once with the aggregated counts.
-                    # Note: update_request_counters needs to be updated to support increments > 1
-                    # For now, we still use the single update logic but it's already much better.
-                    reason = blocker.check_request(ip, 0, stats["last_path"], stats["last_host"])
-                    if reason:
-                        blocked_count += 1
-                except Exception as e:
-                    logger.error(f"Error checking IP {ip}: {e}")
+            # Check Geo-Blocking or WAF even if no failed requests yet in this batch
+            # If IP is already locally cached as blocked, skip
+            if blocker.is_blocked(ip):
+                continue
+                
+            try:
+                # In this optimized version, we could have a batch-update for counters,
+                # but for now we just call it once with the aggregated counts.
+                reason = blocker.check_request(
+                    ip, 
+                    0, 
+                    stats["last_path"], 
+                    stats["last_host"], 
+                    stats["last_ua"], 
+                    stats["country_code"]
+                )
+                if reason:
+                    blocked_count += 1
+            except Exception as e:
+                logger.error(f"Error checking IP {ip}: {e}")
 
     inserted = insert_traffic_batch(rows)
     logger.info("Synced %d new entries", inserted)

@@ -24,6 +24,7 @@ dependencies = [
     "redis>=7.3.0",
     "pyotp>=2.9.0",
     "qrcode>=8.2",
+    "pillow>=10.2.0",
     "prometheus-client>=0.24.1",
     "watchdog>=6.0.0",
     "fastapi>=0.135.1",

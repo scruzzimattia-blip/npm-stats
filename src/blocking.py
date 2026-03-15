@@ -71,7 +71,7 @@ class IPBlocker:
                 logger.error(f"Failed to initialize CrowdSec: {e}")
 
     def check_request(
-        self, ip: str, status: int, path: str, host: str = "", user_agent: str = ""
+        self, ip: str, status: int, path: str, host: str = "", user_agent: str = "", country_code: Optional[str] = None
     ) -> Optional[str]:
         """Check if a request should trigger blocking using DB for shared state."""
         if not app_config.enable_blocking:
@@ -84,6 +84,24 @@ class IPBlocker:
         if self._is_asn_blocked(ip):
             reason = f"ASN ist blockiert (Netzwerk-Sperre)"
             return reason
+
+        # 0.1 Geo-Blocking Check
+        if country_code:
+            # Check if country is explicitly blocked
+            if country_code in app_config.blocked_countries:
+                reason = f"Land {country_code} ist gesperrt (Geo-Blocking)"
+                # 24h block
+                block_until = datetime.now(timezone.utc) + timedelta(days=1)
+                self._block_ip(ip, reason, block_until)
+                return reason
+            
+            # Check if only specific countries are allowed
+            if app_config.allow_only_countries and country_code not in app_config.allow_only_countries:
+                reason = f"Land {country_code} ist nicht in der Erlaubt-Liste (Geo-Blocking)"
+                # 24h block
+                block_until = datetime.now(timezone.utc) + timedelta(days=1)
+                self._block_ip(ip, reason, block_until)
+                return reason
 
         # WAF: User-Agent Check
         if self._is_malicious_user_agent(user_agent):
