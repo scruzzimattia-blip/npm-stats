@@ -170,6 +170,14 @@ class IPBlocker:
             except Exception as e:
                 logger.error(f"Failed to block IP {ip} at Cloudflare level: {e}")
 
+        # Save to database
+        try:
+            from src.database import add_blocked_ip
+
+            add_blocked_ip(ip, reason, block_until)
+        except Exception as e:
+            logger.error(f"Failed to save IP {ip} to blocklist DB: {e}")
+
         # Reset counters in DB after blocking
         try:
             reset_request_counters(ip)
