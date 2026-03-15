@@ -19,12 +19,13 @@ def get_docker_client():
     
     try:
         # Check if socket exists
-        if not os.path.exists("/var/run/docker.sock"):
-            logger.debug("Docker socket /var/run/docker.sock not found.")
+        socket_path = "/var/run/docker.sock"
+        if not os.path.exists(socket_path):
+            logger.debug(f"Docker socket {socket_path} not found.")
             return None
             
-        # Connect via default socket
-        client = docker.from_env()
+        # Connect via explicit unix socket path
+        client = docker.DockerClient(base_url=f"unix://{socket_path}")
         # Test connection
         client.ping()
         return client
