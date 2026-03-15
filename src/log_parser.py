@@ -164,6 +164,13 @@ def should_ignore_ip(ip_str: str) -> bool:
     return False
 
 
+from functools import lru_cache
+
+# Fast cache for datetime parsing since many logs happen in the same second
+@lru_cache(maxsize=1024)
+def parse_nginx_timestamp(time_str: str) -> datetime:
+    return datetime.strptime(time_str, "%d/%b/%Y:%H:%M:%S %z")
+
 def parse_log_line(line: str) -> Optional[Dict[str, Any]]:
     """Parse a single log line and return extracted data."""
     match = LOG_PATTERN.match(line)
@@ -172,7 +179,7 @@ def parse_log_line(line: str) -> Optional[Dict[str, Any]]:
         # Try fallback pattern
         match = LOG_PATTERN_FALLBACK.match(line)
         if not match:
-            logger.debug(f"Failed to parse log line: {line[:100]}...")
+            # logger.debug(f"Failed to parse log line: {line[:100]}...") # Disabled to avoid log spam
             return None
 
         data = match.groupdict()
@@ -190,9 +197,9 @@ def parse_log_line(line: str) -> Optional[Dict[str, Any]]:
     if should_ignore_ip(client_ip):
         return None
 
-    # Parse timestamp
+    # Parse timestamp using fast cache
     try:
-        dt = datetime.strptime(data["time_local"], "%d/%b/%Y:%H:%M:%S %z")
+        dt = parse_nginx_timestamp(data["time_local"])
     except ValueError as e:
         logger.debug(f"Failed to parse timestamp '{data['time_local']}': {e}")
         return None
