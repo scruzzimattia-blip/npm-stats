@@ -8,10 +8,11 @@ from .config import app_config
 from .database import (
     update_request_counters,
     reset_request_counters,
-    cleanup_old_trackers,
+    cleanup_trackers,
     get_tracked_ip_count,
     get_whitelist,
-    get_asn_blocklist
+    get_asn_blocklist,
+    get_threat_score
 )
 from .notifications import send_notification
 from .utils.whois import get_whois_info
@@ -101,6 +102,16 @@ class IPBlocker:
                 # 24h block
                 block_until = datetime.now(timezone.utc) + timedelta(days=1)
                 self._block_ip(ip, reason, block_until)
+                return reason
+
+        # 0.2 Fake Bot Check (Reverse DNS)
+        if "bot" in user_agent.lower() or "google" in user_agent.lower() or "bing" in user_agent.lower():
+            if not self._is_verified_bot(ip, user_agent):
+                reason = f"Fake Bot erkannt (User-Agent Spoofing): {user_agent}"
+                # 7-day block for fake bots
+                block_until = datetime.now(timezone.utc) + timedelta(days=7)
+                self._block_ip(ip, reason, block_until)
+                logger.warning(f"SPOOFING DETECTED: IP {ip} claims to be {user_agent}")
                 return reason
 
         # WAF: User-Agent Check
@@ -198,7 +209,12 @@ class IPBlocker:
         return None
 
     def _check_thresholds(self, counts: Dict[str, int]) -> Optional[str]:
-        """Check if IP exceeds any threshold based on DB counts."""
+        """Check if IP exceeds any threshold based on DB counts or threat score."""
+        # 0. Check threat score (new system)
+        threat_score = counts.get("threat_score", 0)
+        if threat_score >= 100:
+            return f"Behavioral threat score reached threshold ({threat_score}/100)"
+
         if counts["count_404"] >= app_config.max_404_errors:
             return f"Too many 404 errors ({counts['count_404']}/{app_config.max_404_errors})"
 
@@ -219,6 +235,40 @@ class IPBlocker:
             return f"Rate limit exceeded ({counts['total_requests']} req/5min)"
 
         return None
+
+    def _is_verified_bot(self, ip: str, user_agent: str) -> bool:
+        """Verify if a bot claiming to be Google/Bing is actually from them using RDNS."""
+        import socket
+        ua_lower = user_agent.lower()
+        
+        # Check for Googlebot
+        if "googlebot" in ua_lower:
+            try:
+                # 1. Reverse DNS (IP -> Hostname)
+                hostname, _, _ = socket.gethostbyaddr(ip)
+                # 2. Verify domain ends with .googlebot.com or .google.com
+                if not (hostname.endswith(".googlebot.com") or hostname.endswith(".google.com")):
+                    return False
+                # 3. Forward DNS (Hostname -> IP) to prevent DNS Spoofing
+                verified_ip = socket.gethostbyname(hostname)
+                return verified_ip == ip
+            except Exception:
+                return False
+                
+        # Check for Bingbot
+        if "bingbot" in ua_lower:
+            try:
+                hostname, _, _ = socket.gethostbyaddr(ip)
+                if not hostname.endswith(".search.msn.com"):
+                    return False
+                verified_ip = socket.gethostbyname(hostname)
+                return verified_ip == ip
+            except Exception:
+                return False
+                
+        # For other bots (not critical search engines), we trust for now
+        # but could be extended
+        return True
 
     def _is_suspicious_path(self, path: str) -> bool:
         """Check if path is suspicious."""

@@ -274,6 +274,7 @@ def update_request_counters(
     is_failed = 1 if (is_404 or is_403 or is_5xx or is_susp) else 0
     
     # Use Redis pipeline for atomic operations
+    import time
     pipe = r.pipeline()
     pipe.hincrby(key, "count_404", is_404)
     pipe.hincrby(key, "count_403", is_403)
@@ -282,23 +283,66 @@ def update_request_counters(
     pipe.hincrby(key, "total_failed", is_failed)
     pipe.hincrby(key, "total_requests", 1)
     
-    # Set TTL to 5 minutes if it doesn't have one (or reset it slightly)
-    # The requirement was "resets if last update was more than 5 mins ago". 
-    # Redis TTL handles this automatically. We just ensure the key expires 5 mins after creation.
-    # To mimic rolling window, we can reset TTL on every update, or just let it expire.
-    # Resetting on every update is standard rate-limiting sliding window.
-    pipe.expire(key, 300) 
+    # Update threat score
+    threat_increment = 0
+    if is_susp: threat_increment += 30
+    elif is_403: threat_increment += 20
+    elif is_404: threat_increment += 5
+    elif is_5xx: threat_increment += 10
+    
+    if threat_increment > 0:
+        pipe.hincrby(key, "threat_score", threat_increment)
+        pipe.hset(key, "last_update_ts", time.time())
+    
+    # Set TTL to 24h for long-term tracking
+    pipe.expire(key, 86400) 
     
     results = pipe.execute()
     
+    # Build result dict
+    current_data = r.hgetall(key)
     return {
-        "count_404": results[0],
-        "count_403": results[1],
-        "count_5xx": results[2],
-        "count_suspicious": results[3],
-        "total_failed": results[4],
-        "total_requests": results[5]
+        "count_404": int(current_data.get("count_404", 0)),
+        "count_403": int(current_data.get("count_403", 0)),
+        "count_5xx": int(current_data.get("count_5xx", 0)),
+        "count_suspicious": int(current_data.get("count_suspicious", 0)),
+        "total_failed": int(current_data.get("total_failed", 0)),
+        "total_requests": int(current_data.get("total_requests", 0)),
+        "threat_score": int(current_data.get("threat_score", 0))
     }
+
+
+def get_threat_score(ip: str) -> int:
+    """Get current threat score for an IP with decay (-10 per hour)."""
+    r = get_redis()
+    key = f"tracker:{ip}"
+    data = r.hgetall(key)
+    if not data:
+        return 0
+        
+    score = int(data.get("threat_score", 0))
+    last_update = float(data.get("last_update_ts", 0))
+    
+    if score > 0 and last_update > 0:
+        import time
+        hours_passed = (time.time() - last_update) / 3600
+        decay = int(hours_passed * 10)
+        if decay > 0:
+            score = max(0, score - decay)
+            r.hset(key, "threat_score", score)
+            
+    return score
+
+
+def update_threat_score(ip: str, increment: int):
+    """Update threat score manually (e.g. for instant blocks)."""
+    r = get_redis()
+    key = f"tracker:{ip}"
+    import time
+    pipe = r.pipeline()
+    pipe.hincrby(key, "threat_score", increment)
+    pipe.hset(key, "last_update_ts", time.time())
+    pipe.execute()
 
 
 def reset_request_counters(ip: str):
