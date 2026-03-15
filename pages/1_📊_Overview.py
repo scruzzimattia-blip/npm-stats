@@ -78,7 +78,7 @@ def main():
     hourly_summary = _cached_hourly_summary(hosts=selected_hosts, start_date=start_date, end_date=end_date)
     top_ips_summary = _cached_top_ips(hosts=selected_hosts, start_date=start_date, end_date=end_date)
 
-    tab1, tab2, tab3 = st.tabs(["📊 Übersicht", "🔴 Live Logs", "🔄 NPM Hosts"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Übersicht", "🔴 Live Logs", "🤖 KI Analyse", "🔄 NPM Hosts"])
 
     with tab1:
         render_charts(df, hourly_summary)
@@ -114,6 +114,24 @@ def main():
             st.info("Keine Live-Logs verfügbar.")
 
     with tab3:
+        st.subheader("🤖 KI Sicherheits-Briefing")
+        st.markdown("""
+        Lasse dir eine KI-gestützte Analyse der Sicherheitslage der letzten 24 Stunden erstellen. 
+        Die KI analysiert Trends, blockierte IPs und verdächtige Muster.
+        """)
+        
+        if st.button("✨ Bericht generieren", use_container_width=True):
+            from src.utils.briefings import SecurityBriefing
+            briefing = SecurityBriefing()
+            with st.spinner("KI analysiert Daten..."):
+                report = briefing.generate_daily_summary()
+                if report:
+                    st.markdown("---")
+                    st.markdown(report)
+                else:
+                    st.error("Fehler beim Generieren des Berichts.")
+
+    with tab4:
         render_npm_hosts_status()
 
 if __name__ == "__main__":

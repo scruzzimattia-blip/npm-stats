@@ -1,93 +1,116 @@
+"""AI-powered security briefings and reports."""
+
 import logging
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional
 
-import requests
-
-from src.config import app_config
-from src.database import add_ai_report, get_connection
+from ..config import app_config
+from ..database import get_connection
 
 logger = logging.getLogger(__name__)
 
-class DailyBriefingGenerator:
-    """Generate daily security briefings using AI."""
+class SecurityBriefing:
+    """Generate security summaries using AI."""
 
     def __init__(self):
-        self.api_key = app_config.openrouter_api_key
-        self.model = app_config.ai_model
-        self.base_url = "https://openrouter.ai/api/v1/chat/completions"
+        from ..ai_analyzer import AIAnalyzer
+        self.analyzer = AIAnalyzer()
 
-    def generate_briefing(self) -> str:
-        """Analyze last 24h of traffic and generate a Markdown briefing."""
-        if not self.api_key:
-            return "Fehler: OpenRouter API Key fehlt."
+    def generate_daily_summary(self) -> Optional[str]:
+        """Generate a summary of the last 24 hours of security activity."""
+        if not app_config.openrouter_api_key:
+            return "KI-Zusammenfassung nicht verfügbar (API-Key fehlt)."
 
-        # 1. Gather 24h context
-        context = self._get_24h_summary()
+        # 1. Gather stats for the last 24h
+        stats = self._get_last_24h_stats()
+        if stats["total_requests"] == 0:
+            return "Keine Traffic-Daten für die letzten 24 Stunden vorhanden."
 
-        # 2. Build Prompt
-        prompt = f"""Analysiere den Traffic der letzten 24 Stunden meines Nginx Proxy Managers.
-Identifiziere Trends, auffällige Anomalien und schlage proaktiv neue Sicherheitsregeln vor.
+        # 2. Build prompt
+        prompt = f"""Du bist ein Senior Security Analyst. Erstelle eine prägnante Zusammenfassung der Sicherheitslage der letzten 24 Stunden.
 
-Zusammenfassung der Daten (letzte 24h):
-{context}
+Statistiken:
+- Gesamt-Requests: {stats['total_requests']}
+- Einzigartige IPs: {stats['unique_ips']}
+- Blockierte IPs (neu): {stats['new_blocks']}
+- Top blockierte Länder: {', '.join(stats['top_countries'])}
+- Häufigste Angriffsvektoren: {', '.join(stats['top_reasons'])}
 
-Erstelle einen 'Daily Morning Briefing' Bericht im Markdown-Format für den Admin.
-Gliedere ihn in:
-- **Status-Übersicht**: (Wie war der Traffic im Vergleich zum Vortag?)
-- **Top Bedrohungen**: (Welche IPs/ASNs waren besonders bösartig?)
-- **Proaktive Empfehlungen**: (Welche Pfade sollten wir sperren? Welche ASN sollte blockiert werden?)
-- **KI-Fazit**: (Ein kurzer Satz zur Gesamtsicherheitslage)
+Wichtige Ereignisse:
+{stats['events_summary']}
+
+Erstelle einen kurzen, professionellen Bericht im Markdown-Format. Gehe auf Trends ein und gib eine kurze Empfehlung ab.
+Antworte direkt mit dem Markdown-Bericht.
 """
 
-        # 3. Request to OpenRouter
+        # 3. Call AI
         try:
-            response = requests.post(
-                self.base_url,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://github.com/mattia/npm-monitor",
-                    "X-Title": "NPM Monitor Daily Briefing"
-                },
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": "Du bist ein Senior Security Analyst."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "temperature": 0.5
-                },
-                timeout=60
-            )
-            response.raise_for_status()
-            briefing = response.json()["choices"][0]["message"]["content"]
-
-            # Save as a special AI report for "SYSTEM"
-            add_ai_report("SYSTEM_BRIEFING", briefing, "Information", self.model)
-            return briefing
+            # We bypass the JSON requirement for the briefing report to get a nice markdown response
+            # by calling requests directly or modifying the analyzer slightly
+            # For simplicity, we'll use a direct call here or a special method
+            response = self._call_ai_raw(prompt)
+            return response
         except Exception as e:
-            logger.error(f"Failed to generate daily briefing: {e}")
-            return f"Fehler bei der Generierung: {str(e)}"
+            logger.error(f"Failed to generate daily summary: {e}")
+            return None
 
-    def _get_24h_summary(self) -> str:
-        """Collect aggregated stats for the last 24h."""
-        summary = []
-        try:
-            import psycopg.rows as psycopg_rows
-            query = """
-                SELECT host, path, status, COUNT(*) as count
-                FROM traffic
-                WHERE time >= NOW() - INTERVAL '24 hours'
-                GROUP BY host, path, status
-                ORDER BY count DESC
-                LIMIT 30;
-            """
-            with get_connection() as conn:
-                with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
-                    cur.execute(query)
-                    rows = cur.fetchall()
-                    for r in rows:
-                        summary.append(f"- {r['host']}{r['path']} (Status {r['status']}): {r['count']} mal")
-        except Exception as e:
-            summary.append(f"Fehler beim Laden der Daten: {e}")
+    def _get_last_24h_stats(self) -> Dict[str, Any]:
+        """Collect aggregated data for the briefing."""
+        yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+        
+        stats = {
+            "total_requests": 0,
+            "unique_ips": 0,
+            "new_blocks": 0,
+            "top_countries": [],
+            "top_reasons": [],
+            "events_summary": "Keine kritischen Vorfälle."
+        }
 
-        return "\n".join(summary)
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Basic stats
+                cur.execute("SELECT COUNT(*), COUNT(DISTINCT remote_addr) FROM traffic WHERE time >= %s", (yesterday,))
+                row = cur.fetchone()
+                stats["total_requests"] = row[0]
+                stats["unique_ips"] = row[1]
+
+                # Blocks
+                cur.execute("SELECT COUNT(*) FROM blocklist WHERE blocked_at >= %s", (yesterday,))
+                stats["new_blocks"] = cur.fetchone()[0]
+
+                # Top countries
+                cur.execute("""
+                    SELECT country_code, COUNT(*) as c 
+                    FROM traffic 
+                    WHERE time >= %s AND country_code IS NOT NULL 
+                    GROUP BY country_code ORDER BY c DESC LIMIT 3
+                """, (yesterday,))
+                stats["top_countries"] = [f"{r[0]} ({r[1]})" for r in cur.fetchall()]
+
+                # Top reasons
+                cur.execute("""
+                    SELECT reason, COUNT(*) as c 
+                    FROM blocklist 
+                    WHERE blocked_at >= %s 
+                    GROUP BY reason ORDER BY c DESC LIMIT 3
+                """, (yesterday,))
+                stats["top_reasons"] = [f"{r[0]} ({r[1]})" for r in cur.fetchall()]
+
+        return stats
+
+    def _call_ai_raw(self, prompt: str) -> str:
+        """Direct call to OpenRouter without JSON enforcement."""
+        import requests
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {app_config.openrouter_api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": app_config.ai_model,
+            "messages": [{"role": "user", "content": prompt}]
+        }
+        resp = requests.post(url, headers=headers, json=payload, timeout=30)
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]

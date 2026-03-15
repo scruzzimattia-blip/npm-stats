@@ -161,6 +161,18 @@ class IPBlocker:
             reason = "ASN ist blockiert (Netzwerk-Sperre)"
             return reason
 
+        # 0.05 CrowdSec Reputation Check
+        if app_config.enable_crowdsec and self._crowdsec:
+            decision = self._crowdsec.get_ip_reputation(ip)
+            if decision:
+                reason = f"CrowdSec Reputations-Sperre: {decision.get('type', 'Banned')}"
+                # 24h block for CrowdSec listed IPs
+                block_until = datetime.now(timezone.utc) + timedelta(days=1)
+                self._block_ip(ip, reason, block_until)
+                logger.warning(f"CROWDSEC BLOCK for IP {ip}: {reason}")
+                send_notification(ip, reason, block_until)
+                return reason
+
         # 0.1 Geo-Blocking Check
         if country_code:
             # Check if country is explicitly blocked
