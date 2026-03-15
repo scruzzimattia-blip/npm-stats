@@ -233,6 +233,20 @@ def main():
 
     with tab_notify:
         st.subheader("Alerting Konfiguration")
+        
+        # Test Alert Button
+        col_t1, col_t2 = st.columns([3, 1])
+        with col_t1:
+            st.info("Hier kannst du deine Alerting-Kanäle konfigurieren. Klicke auf '🔔 Test-Alert senden', um deine Einstellungen zu prüfen.")
+        with col_t2:
+            if st.button("🔔 Test-Alert senden", use_container_width=True):
+                from src.notifications import send_test_notification
+                with st.spinner("Sende Test-Alert..."):
+                    if send_test_notification():
+                        st.toast("Test-Alert erfolgreich versendet!", icon="✅")
+                    else:
+                        st.error("Fehler beim Senden des Test-Alerts. Bitte prüfe die Logs und Konfiguration.")
+
         with st.form("notification_settings"):
             st.write("**Webhook (Discord / Slack)**")
             webhook = st.text_input(
