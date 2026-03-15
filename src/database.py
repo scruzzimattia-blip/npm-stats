@@ -353,7 +353,7 @@ def reset_request_counters(ip: str):
         logger.error(f"Failed to reset Redis counter for {ip}: {e}")
 
 
-def cleanup_old_trackers(max_age_minutes: int = 60):
+def cleanup_trackers(max_age_minutes: int = 60):
     """Redis handles cleanup automatically via TTL. This is a no-op."""
     pass
 

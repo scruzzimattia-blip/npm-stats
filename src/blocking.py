@@ -527,7 +527,7 @@ class IPBlocker:
 
     def cleanup_old_ips(self, max_age_minutes: int = 60):
         """Cleanup old IPs from memory and DB tracker."""
-        cleanup_old_trackers(max_age_minutes)
+        cleanup_trackers(max_age_minutes)
         # Memory cleanup for local cache
         now = datetime.now(timezone.utc)
         expired = [ip for ip, until in self.blocked_ips.items() if now > until]
