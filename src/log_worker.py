@@ -29,6 +29,8 @@ shutdown_requested = False
 # Prometheus Metrics
 METRIC_REQUESTS = Counter("npm_requests_total", "Total number of processed requests")
 METRIC_SYNC_DUR = Gauge("npm_sync_duration_seconds", "Time spent in last sync")
+METRIC_BLOCKED_IPS = Gauge("npm_blocked_ips_total", "Current number of blocked IPs")
+METRIC_THREATS_DETECTED = Counter("npm_threats_detected_total", "Total number of security threats detected")
 
 
 def handle_signal(signum: int, frame) -> None:
@@ -101,7 +103,6 @@ def run_log_worker() -> None:
             wait_timeout = max(0.1, float(sync_interval) - time_since_last_sync)
 
             # If watchdog is alive, wait for its event with timeout
-            # If watchdog is not alive, just sleep for the remaining interval
             if observer.is_alive():
                 event_handler.sync_requested.wait(timeout=wait_timeout)
             else:
@@ -121,6 +122,15 @@ def run_log_worker() -> None:
                 duration = time.time() - start
 
                 METRIC_SYNC_DUR.set(duration)
+
+                # Update Blocked IPs metric
+                try:
+                    from src.database import get_database_info
+                    db_info = get_database_info()
+                    METRIC_BLOCKED_IPS.set(db_info.get("blocked_count", 0))
+                except Exception:
+                    pass
+
                 if inserted > 0:
                     METRIC_REQUESTS.inc(inserted)
                     logger.info(f"Processed {inserted} new log entries in {duration:.2f}s")
