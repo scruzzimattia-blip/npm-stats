@@ -68,7 +68,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [ui, worker, ai, api]
+        service: [ui, log-worker, cron-worker, ai, api]
     steps:
       - uses: actions/checkout@v4
 

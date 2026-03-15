@@ -39,7 +39,9 @@ COPY --chown=appuser:appuser entrypoint-ui.sh .
 COPY --chown=appuser:appuser entrypoint-worker.sh .
 COPY --chown=appuser:appuser entrypoint-ai.sh .
 COPY --chown=appuser:appuser entrypoint-api.sh .
-RUN chmod +x entrypoint.sh entrypoint-ui.sh entrypoint-worker.sh entrypoint-ai.sh entrypoint-api.sh
+COPY --chown=appuser:appuser entrypoint-log-worker.sh .
+COPY --chown=appuser:appuser entrypoint-cron-worker.sh .
+RUN chmod +x entrypoint.sh entrypoint-ui.sh entrypoint-worker.sh entrypoint-ai.sh entrypoint-api.sh entrypoint-log-worker.sh entrypoint-cron-worker.sh
 
 USER appuser
 

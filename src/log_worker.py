@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""Real-time log monitoring worker."""
+
+import logging
+import os
+import signal
+import sys
+import time
+import threading
+from pathlib import Path
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+from prometheus_client import start_http_server, Counter, Gauge
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.log_parser import init_geoip
+from src.sync import sync_logs
+from src.utils import setup_logging
+from src.config import app_config
+
+logger = logging.getLogger(__name__)
+
+# Graceful shutdown flag
+shutdown_requested = False
+
+# Prometheus Metrics
+METRIC_REQUESTS = Counter('npm_requests_total', 'Total number of processed requests')
+METRIC_SYNC_DUR = Gauge('npm_sync_duration_seconds', 'Time spent in last sync')
+
+def handle_signal(signum: int, frame) -> None:
+    """Handle shutdown signals gracefully."""
+    global shutdown_requested
+    logger.info(f"Received signal {signum}, shutting down log-worker...")
+    shutdown_requested = True
+
+class LogEventHandler(FileSystemEventHandler):
+    """Event handler for log file modifications."""
+    def __init__(self):
+        self.sync_requested = threading.Event()
+
+    def on_modified(self, event):
+        if not event.is_directory and event.src_path.endswith('.log'):
+            self.sync_requested.set()
+
+def run_log_worker() -> None:
+    """Run the real-time log monitoring loop."""
+    setup_logging()
+    logger.info("Starting specialized NPM Log Worker (Real-time)")
+
+    # Start Prometheus metrics server
+    try:
+        start_http_server(8000)
+        logger.info("Prometheus metrics server started on port 8000")
+    except Exception as e:
+        logger.error(f"Failed to start Prometheus server: {e}")
+
+    # Register signal handlers
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)
+
+    # Initialize GeoIP
+    init_geoip()
+    
+    # Setup Watchdog Observer
+    event_handler = LogEventHandler()
+    observer = Observer()
+    log_dir = app_config.log_dir
+    
+    if os.path.exists(log_dir):
+        observer.schedule(event_handler, log_dir, recursive=False)
+        observer.start()
+        logger.info(f"Monitoring log directory: {log_dir}")
+    else:
+        logger.warning(f"Log directory {log_dir} does not exist. Falling back to 60s periodic sync.")
+
+    # Initial sync
+    sync_logs()
+
+    sync_interval = int(os.getenv("SYNC_INTERVAL", "60"))
+
+    while not shutdown_requested:
+        try:
+            # Wait for changes or periodic fallback
+            timeout = 1.0 if observer.is_alive() else float(sync_interval)
+            event_handler.sync_requested.wait(timeout=timeout)
+            
+            if event_handler.sync_requested.is_set() or not observer.is_alive():
+                event_handler.sync_requested.clear()
+                
+                start = time.time()
+                inserted = sync_logs()
+                duration = time.time() - start
+                
+                METRIC_SYNC_DUR.set(duration)
+                if inserted > 0:
+                    METRIC_REQUESTS.inc(inserted)
+                    logger.info(f"Processed {inserted} new log entries in {duration:.2f}s")
+
+        except Exception as e:
+            logger.error(f"Log worker error: {e}")
+            time.sleep(2)
+
+    if observer.is_alive():
+        observer.stop()
+        observer.join()
+    logger.info("Log worker stopped")
+
+if __name__ == "__main__":
+    run_log_worker()

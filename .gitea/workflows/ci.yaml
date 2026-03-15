@@ -40,12 +40,27 @@ jobs:
             docker push "${BASE_TAG}:latest"
           fi
           
-      - name: Build and Push Worker
+      - name: Build and Push Log Worker
         run: |
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
           VERSION=${{ steps.get_version.outputs.VERSION }}
-          BASE_TAG="192.168.1.41:3000/${REPO_OWNER}/${REPO_NAME}/npm-worker"
+          BASE_TAG="192.168.1.41:3000/${REPO_OWNER}/${REPO_NAME}/npm-log-worker"
+          
+          docker build -t "${BASE_TAG}:${VERSION}" .
+          docker push "${BASE_TAG}:${VERSION}"
+          
+          if [ "$VERSION" != "latest" ]; then
+            docker tag "${BASE_TAG}:${VERSION}" "${BASE_TAG}:latest"
+            docker push "${BASE_TAG}:latest"
+          fi
+          
+      - name: Build and Push Cron Worker
+        run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          BASE_TAG="192.168.1.41:3000/${REPO_OWNER}/${REPO_NAME}/npm-cron-worker"
           
           docker build -t "${BASE_TAG}:${VERSION}" .
           docker push "${BASE_TAG}:${VERSION}"
