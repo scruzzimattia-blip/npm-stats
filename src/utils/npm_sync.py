@@ -48,21 +48,26 @@ def fetch_npm_proxy_hosts() -> List[Dict[str, Any]]:
         engine = get_npm_engine()
         with engine.connect() as conn:
             result = conn.execute(text(query))
-            for row in result:
+            rows = result.mappings().all()
+            logger.info(f"NPM DB query returned {len(rows)} rows.")
+            for row in rows:
                 # domain_names is usually a JSON-like string in NPM, e.g. ["domain.com"]
-                raw_domains = row[0]
+                raw_domains = row["domain_names"]
                 if isinstance(raw_domains, str):
                     # Remove JSON array characters and quotes
                     clean_domains = raw_domains.strip('[]"\'').split(',')
                     domains = [d.strip(' "\'') for d in clean_domains if d.strip(' "\'')]
                 else:
                     domains = []
+                
+                if domains:
+                    logger.debug(f"Found host: {domains[0]} forwarding to {row['forward_host']}:{row['forward_port']}")
 
                 hosts.append({
                     "domains": domains,
-                    "forward": f"{row[1]}:{row[2]}",
-                    "enabled": bool(row[3]),
-                    "ssl": bool(row[4]),
+                    "forward": f"{row['forward_host']}:{row['forward_port']}",
+                    "enabled": bool(row["enabled"]),
+                    "ssl": bool(row["ssl_forced"]),
                 })
         return hosts
     except Exception as e:
