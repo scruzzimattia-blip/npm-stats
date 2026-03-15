@@ -6,11 +6,18 @@ ifneq (,$(wildcard .env))
     export
 endif
 
-PYTHON = python3
-STREAMLIT = streamlit
-UVICORN = uvicorn
+VENV = .venv
+PYTHON = $(VENV)/bin/python3
+STREAMLIT = $(VENV)/bin/streamlit
+UVICORN = $(VENV)/bin/uvicorn
 
-.PHONY: all help ui log-worker cron-worker ai api stop-all
+.PHONY: all help setup ui log-worker cron-worker ai api stop-all
+
+setup:
+	@echo "📦 Setting up virtual environment..."
+	python3 -m venv $(VENV)
+	$(VENV)/bin/pip install --upgrade pip
+	$(VENV)/bin/pip install -r requirements.txt
 
 help:
 	@echo "Available commands:"
@@ -39,7 +46,7 @@ ai:
 
 api:
 	@echo "🔌 Starting API..."
-	$(UVICORN) src.api.main:app --host 0.0.0.0 --port 8001
+	$(UVICORN) src.api.main:app --host 0.0.0.0 --port 8002
 
 stop-all:
 	@echo "🛑 Stopping all processes..."

@@ -3,6 +3,7 @@
 import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import pandas as pd
@@ -87,6 +88,7 @@ def init_database() -> bool:
     """Initialize database schema via Alembic (handled externally or in entrypoints)."""
     logger.info("Database schema is now managed by Alembic. Assuming up-to-date schema.")
     return True
+
 
 def get_ai_reports(ip_address: str) -> List[Dict[str, Any]]:
     """Get all AI analysis reports for a specific IP."""
@@ -209,6 +211,7 @@ def create_user(username: str, password_hash: str, role: str = "viewer", totp_se
         logger.error(f"Failed to create user {username}: {e}")
         return False
 
+
 def update_user_totp_secret(username: str, totp_secret: Optional[str]) -> bool:
     """Update TOTP secret for a user."""
     query = "UPDATE users SET totp_secret = %s WHERE username = %s"
@@ -252,6 +255,7 @@ import json
 # Initialize Redis client lazily
 _redis_client: Optional[redis.Redis] = None
 
+
 def get_redis() -> redis.Redis:
     global _redis_client
     if _redis_client is None:
@@ -260,21 +264,20 @@ def get_redis() -> redis.Redis:
 
 
 # Request tracker operations for shared blocking state (Now using Redis)
-def update_request_counters(
-    ip: str, status: int, is_suspicious: bool = False
-) -> Dict[str, int]:
+def update_request_counters(ip: str, status: int, is_suspicious: bool = False) -> Dict[str, int]:
     """Update request counters in Redis and return current counts."""
     r = get_redis()
     key = f"tracker:{ip}"
-    
+
     is_404 = 1 if status == 404 else 0
     is_403 = 1 if status == 403 else 0
     is_5xx = 1 if 500 <= status <= 599 else 0
     is_susp = 1 if is_suspicious else 0
     is_failed = 1 if (is_404 or is_403 or is_5xx or is_susp) else 0
-    
+
     # Use Redis pipeline for atomic operations
     import time
+
     pipe = r.pipeline()
     pipe.hincrby(key, "count_404", is_404)
     pipe.hincrby(key, "count_403", is_403)
@@ -282,23 +285,27 @@ def update_request_counters(
     pipe.hincrby(key, "count_suspicious", is_susp)
     pipe.hincrby(key, "total_failed", is_failed)
     pipe.hincrby(key, "total_requests", 1)
-    
+
     # Update threat score
     threat_increment = 0
-    if is_susp: threat_increment += 30
-    elif is_403: threat_increment += 20
-    elif is_404: threat_increment += 5
-    elif is_5xx: threat_increment += 10
-    
+    if is_susp:
+        threat_increment += 30
+    elif is_403:
+        threat_increment += 20
+    elif is_404:
+        threat_increment += 5
+    elif is_5xx:
+        threat_increment += 10
+
     if threat_increment > 0:
         pipe.hincrby(key, "threat_score", threat_increment)
         pipe.hset(key, "last_update_ts", time.time())
-    
+
     # Set TTL to 24h for long-term tracking
-    pipe.expire(key, 86400) 
-    
+    pipe.expire(key, 86400)
+
     results = pipe.execute()
-    
+
     # Build result dict
     current_data = r.hgetall(key)
     return {
@@ -308,7 +315,7 @@ def update_request_counters(
         "count_suspicious": int(current_data.get("count_suspicious", 0)),
         "total_failed": int(current_data.get("total_failed", 0)),
         "total_requests": int(current_data.get("total_requests", 0)),
-        "threat_score": int(current_data.get("threat_score", 0))
+        "threat_score": int(current_data.get("threat_score", 0)),
     }
 
 
@@ -319,18 +326,19 @@ def get_threat_score(ip: str) -> int:
     data = r.hgetall(key)
     if not data:
         return 0
-        
+
     score = int(data.get("threat_score", 0))
     last_update = float(data.get("last_update_ts", 0))
-    
+
     if score > 0 and last_update > 0:
         import time
+
         hours_passed = (time.time() - last_update) / 3600
         decay = int(hours_passed * 10)
         if decay > 0:
             score = max(0, score - decay)
             r.hset(key, "threat_score", score)
-            
+
     return score
 
 
@@ -339,6 +347,7 @@ def update_threat_score(ip: str, increment: int):
     r = get_redis()
     key = f"tracker:{ip}"
     import time
+
     pipe = r.pipeline()
     pipe.hincrby(key, "threat_score", increment)
     pipe.hset(key, "last_update_ts", time.time())
@@ -372,10 +381,10 @@ def cleanup_old_data(days: Optional[int] = None) -> int:
     """Archive old data to CSV and delete from DB. Returns number of deleted rows."""
     retention_days = days if days is not None else app_config.retention_days
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
-    
+
     archive_dir = Path("archives")
     archive_dir.mkdir(exist_ok=True)
-    
+
     archive_file = archive_dir / f"traffic_archive_{cutoff_date.strftime('%Y%m%d')}.csv.gz"
 
     with get_connection() as conn:
@@ -653,7 +662,7 @@ def get_geo_summary(
                 params or None,
             )
             country_rows = cur.fetchall()
-            
+
             # Get city stats
             cur.execute(
                 f"""
@@ -672,14 +681,12 @@ def get_geo_summary(
 
             return {
                 "countries": pd.DataFrame(country_rows) if country_rows else pd.DataFrame(),
-                "cities": pd.DataFrame(city_rows) if city_rows else pd.DataFrame()
+                "cities": pd.DataFrame(city_rows) if city_rows else pd.DataFrame(),
             }
 
 
 # Blocklist operations
-def add_blocked_ip(
-    ip_address: str, reason: str, block_until: datetime, is_manual: bool = False
-) -> bool:
+def add_blocked_ip(ip_address: str, reason: str, block_until: datetime, is_manual: bool = False) -> bool:
     """Add an IP address to the blocklist."""
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -815,14 +822,14 @@ def get_database_info() -> Dict[str, Any]:
                 # Row counts
                 cur.execute("SELECT COUNT(*) FROM traffic;")
                 info["total_rows"] = cur.fetchone()[0]
-                
+
                 cur.execute("SELECT COUNT(*) FROM blocklist WHERE unblocked_at IS NULL AND block_until > NOW();")
                 info["blocked_count"] = cur.fetchone()[0]
-                
+
                 # Table size (traffic only, as it's the main data)
                 cur.execute("SELECT pg_size_pretty(pg_total_relation_size('traffic'));")
                 info["table_size"] = cur.fetchone()[0]
-                
+
                 # Timestamps
                 cur.execute("SELECT MIN(time), MAX(time) FROM traffic;")
                 res = cur.fetchone()
@@ -831,37 +838,32 @@ def get_database_info() -> Dict[str, Any]:
                     info["newest_record"] = res[1]
     except Exception as e:
         logger.error(f"Error getting database info: {e}")
-        
+
     return info
 
 
 def get_traffic_spike_metrics(
-    hosts: Optional[List[str]] = None,
-    recent_minutes: int = 5,
-    baseline_minutes: int = 60
+    hosts: Optional[List[str]] = None, recent_minutes: int = 5, baseline_minutes: int = 60
 ) -> Dict[str, Any]:
     """
     Compare recent traffic with a baseline to detect spikes.
-    
+
     Returns:
         Dict with current_rate, baseline_rate, and is_spike boolean.
     """
     now = datetime.now(timezone.utc)
     recent_start = now - timedelta(minutes=recent_minutes)
     baseline_start = now - timedelta(minutes=baseline_minutes)
-    
+
     conditions = []
-    params: Dict[str, Any] = {
-        "recent_start": recent_start,
-        "baseline_start": baseline_start
-    }
-    
+    params: Dict[str, Any] = {"recent_start": recent_start, "baseline_start": baseline_start}
+
     if hosts:
         conditions.append("host = ANY(%(hosts)s)")
         params["hosts"] = list(hosts)
-        
+
     where_clause = " AND ".join(conditions) + " AND " if conditions else ""
-    
+
     query = f"""
         SELECT
             SUM(CASE WHEN time >= %(recent_start)s THEN 1 ELSE 0 END) as recent_count,
@@ -869,28 +871,30 @@ def get_traffic_spike_metrics(
         FROM traffic
         WHERE {where_clause} time >= %(baseline_start)s;
     """
-    
+
     with get_connection() as conn:
         with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
             cur.execute(query, params)
             res = cur.fetchone()
-            
+
             recent_count = res["recent_count"] or 0
             baseline_count = res["baseline_count"] or 0
-            
+
             # Calculate rates per minute
             current_rate = recent_count / recent_minutes
             # Baseline rate (excluding the recent window to be more accurate)
             baseline_rate = (baseline_count - recent_count) / max(1, (baseline_minutes - recent_minutes))
-            
+
             return {
                 "current_rate": round(current_rate, 2),
                 "baseline_rate": round(baseline_rate, 2),
                 "recent_count": recent_count,
                 "is_spike": (
-                    recent_count >= app_config.spike_min_requests and 
-                    current_rate > (baseline_rate * app_config.spike_threshold_factor)
-                ) if app_config.enable_anomaly_detection else False
+                    recent_count >= app_config.spike_min_requests
+                    and current_rate > (baseline_rate * app_config.spike_threshold_factor)
+                )
+                if app_config.enable_anomaly_detection
+                else False,
             }
 
 
