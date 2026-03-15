@@ -12,7 +12,7 @@ from urllib.parse import quote_plus
 class DatabaseConfig:
     """Database connection configuration."""
 
-    host: str = field(default_factory=lambda: os.getenv("DB_HOST", "npm-monitor-db"))
+    host: str = field(default_factory=lambda: os.getenv("DB_HOST", "localhost"))
     port: int = field(default_factory=lambda: int(os.getenv("DB_PORT", "5432")))
     name: str = field(default_factory=lambda: os.getenv("DB_NAME", "npm_monitor"))
     user: str = field(default_factory=lambda: os.getenv("DB_USER", "npm_user"))
@@ -34,12 +34,12 @@ class DatabaseConfig:
 class AppConfig:
     """Application configuration."""
 
-    log_dir: str = field(default_factory=lambda: os.getenv("LOG_DIR", "/logs"))
+    log_dir: str = field(default_factory=lambda: os.getenv("LOG_DIR", "/var/log/npm"))
     lines_per_file: int = field(default_factory=lambda: int(os.getenv("LINES_PER_FILE", "10000")))
     max_display_rows: int = field(default_factory=lambda: int(os.getenv("MAX_DISPLAY_ROWS", "50000")))
     retention_days: int = field(default_factory=lambda: int(os.getenv("RETENTION_DAYS", "30")))
     enable_geoip: bool = field(default_factory=lambda: os.getenv("ENABLE_GEOIP", "false").lower() == "true")
-    geoip_db_path: str = field(default_factory=lambda: os.getenv("GEOIP_DB_PATH", "/geoip/GeoLite2-City.mmdb"))
+    geoip_db_path: str = field(default_factory=lambda: os.getenv("GEOIP_DB_PATH", "/usr/share/GeoIP/GeoLite2-City.mmdb"))
     enable_auth: bool = field(default_factory=lambda: os.getenv("ENABLE_AUTH", "false").lower() == "true")
     auth_username: str = field(default_factory=lambda: os.getenv("AUTH_USERNAME", "admin"))
     auth_password: str = field(default_factory=lambda: os.getenv("AUTH_PASSWORD", ""))
