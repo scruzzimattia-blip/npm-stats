@@ -98,6 +98,8 @@ class AppConfig:
         ]
     )
     use_firewall: bool = field(default_factory=lambda: os.getenv("USE_FIREWALL", "false").lower() == "true")
+    use_docker: bool = field(default_factory=lambda: os.getenv("USE_DOCKER", "false").lower() == "true")
+    iptables_parent_chain: str = field(default_factory=lambda: os.getenv("IPTABLES_PARENT_CHAIN", ""))
     honey_pot_duration: int = field(
         default_factory=lambda: int(os.getenv("HONEY_POT_DURATION", "31536000"))
     )  # Default: 1 year in seconds

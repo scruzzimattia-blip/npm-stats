@@ -8,6 +8,7 @@ from .config import app_config
 from .database import (
     cleanup_trackers,
     get_asn_blocklist,
+    get_blocked_ips,
     get_tracked_ip_count,
     get_whitelist,
     reset_request_counters,
@@ -37,9 +38,11 @@ class IPBlocker:
                 from .firewall import get_iptables_manager
 
                 self._iptables = get_iptables_manager()
-                if self._iptables.has_permissions:
+                if self._iptables.has_permissions or self._iptables.use_sudo:
                     logger.info("Firewall-level blocking enabled (iptables)")
                     self._iptables.create_chain()
+                    # Task 1: Restore rules from DB
+                    self.restore_firewall_rules()
                 else:
                     logger.warning("Firewall permissions not available, using application-level blocking only")
                     self.use_firewall = False
@@ -73,24 +76,45 @@ class IPBlocker:
             except Exception as e:
                 logger.error(f"Failed to initialize CrowdSec: {e}")
 
-    def _refresh_lists_if_needed(self):
+    def restore_firewall_rules(self):
+        """Task 1: Restore active blocks from database to firewall upon startup."""
+        if not self.use_firewall or not self._iptables:
+            return
+
+        try:
+            active_blocks = get_blocked_ips(active_only=True)
+            if not active_blocks:
+                return
+
+            logger.info(f"Restoring {len(active_blocks)} active blocks to firewall...")
+            count = 0
+            for ip, reason, _, _, _ in active_blocks:
+                if self._iptables.block_ip(ip, f"RESTORED: {reason}"):
+                    count += 1
+            logger.info(f"Successfully restored {count} firewall rules.")
+        except Exception as e:
+            logger.error(f"Failed to restore firewall rules: {e}")
+
+    def _refresh_lists_if_needed(self, force: bool = False):
         """Refresh whitelists and blocklists periodically to avoid DB hammering."""
         import time
 
         now = time.time()
-        if now - self._last_list_refresh > 60:  # Refresh every 60 seconds
-            try:
-                # Refresh whitelist
-                whitelist = get_whitelist()
-                self.whitelisted_ips = {row["ip_address"] for row in whitelist}
+        if not force and now - self._last_list_refresh < 60:  # Refresh every 60 seconds
+            return
 
-                # Refresh ASN blocklist
-                asn_list = get_asn_blocklist()
-                self.blocked_asns = {row["asn"] for row in asn_list}
+        try:
+            # Task 4: Optimized batch-loading for whitelist
+            whitelist = get_whitelist()
+            self.whitelisted_ips = {row["ip_address"] for row in whitelist}
 
-                self._last_list_refresh = now
-            except Exception as e:
-                logger.error(f"Failed to refresh blocking lists: {e}")
+            # Refresh ASN blocklist
+            asn_list = get_asn_blocklist()
+            self.blocked_asns = {str(row["asn"]) for row in asn_list}
+
+            self._last_list_refresh = now
+        except Exception as e:
+            logger.error(f"Failed to refresh blocking lists: {e}")
 
     def _is_asn_blocked(self, ip: str) -> bool:
         """Check if IP belongs to a blocked ASN."""
@@ -127,14 +151,14 @@ class IPBlocker:
         self.blocked_ips[ip] = block_until
 
         # Block at firewall level if enabled
-        if self.use_firewall and hasattr(self, "_iptables") and self._iptables:
+        if self.use_firewall and self._iptables:
             try:
                 self._iptables.block_ip(ip, reason)
             except Exception as e:
                 logger.error(f"Failed to block IP {ip} at firewall level: {e}")
 
         # Block at Cloudflare level if enabled
-        if hasattr(self, "_cloudflare") and self._cloudflare:
+        if self._cloudflare:
             try:
                 self._cloudflare.block_ip(ip, reason)
             except Exception as e:
@@ -218,8 +242,8 @@ class IPBlocker:
             send_notification(ip, reason, block_until)
             return reason
 
-        # WAF: SQLi / XSS / Traversal Check
-        waf_reason = self._check_waf_rules(path)
+        # WAF: Pattern Check (Task 3: Modern threats)
+        waf_reason = self._check_waf_rules(path, user_agent)
         if waf_reason:
             block_until = datetime.now(timezone.utc) + timedelta(seconds=app_config.block_duration * 24)
             self._block_ip(ip, waf_reason, block_until)
@@ -243,7 +267,6 @@ class IPBlocker:
         # Update counters in DB and get current totals
         try:
             # We apply the multiplier manually to the threat score increment
-            # (Note: database.py doesn't know about the multiplier yet, so we use a separate update)
             counts = update_request_counters(ip, status, is_suspicious)
 
             # Apply multiplier to existing increment logic
@@ -308,15 +331,20 @@ class IPBlocker:
             "shodan",
             "mirai",
             "hello, world",
+            "gobuster",
+            "ffuf",
+            "ffuf/",
+            "python-requests/2.6",
+            "masscan/1.0",
         ]
         return any(bad_ua in ua_lower for bad_ua in bad_uas)
 
-    def _check_waf_rules(self, path: str) -> Optional[str]:
-        """Check for SQLi, XSS, Path Traversal or Command Injection patterns."""
+    def _check_waf_rules(self, path: str, user_agent: str = "") -> Optional[str]:
+        """Task 3: Check for SQLi, XSS, Path Traversal, and Modern Threats (Log4Shell, etc.)."""
         if not path:
             return None
 
-        path_lower = path.lower()
+        combined_input = (path + " " + user_agent).lower()
 
         # 1. SQLi heuristic
         sqli_patterns = [
@@ -328,16 +356,18 @@ class IPBlocker:
             "information_schema",
             "sysobjects",
             "syscolumns",
+            "waitfor delay",
+            "pg_sleep(",
         ]
-        if any(pattern in path_lower for pattern in sqli_patterns):
+        if any(pattern in combined_input for pattern in sqli_patterns):
             return "SQL-Injection Versuch (WAF Heuristik)"
 
         # 2. XSS heuristic
         xss_patterns = ["<script", "%3cscript", "javascript:", "onerror=", "onload=", "alert("]
-        if any(pattern in path_lower for pattern in xss_patterns):
+        if any(pattern in combined_input for pattern in xss_patterns):
             return "XSS Versuch (WAF Heuristik)"
 
-        # 3. Path Traversal
+        # 3. Path Traversal & LFI
         traversal_patterns = [
             "../",
             "..\\",
@@ -347,11 +377,27 @@ class IPBlocker:
             "c:\\windows",
             "boot.ini",
             "/proc/self",
+            "file_get_contents",
+            "include(",
         ]
-        if any(pattern in path_lower for pattern in traversal_patterns):
-            return "Path Traversal Versuch (WAF Heuristik)"
+        if any(pattern in combined_input for pattern in traversal_patterns):
+            return "Path Traversal / LFI Versuch (WAF Heuristik)"
 
-        # 4. Command Injection
+        # 4. Modern Threats & Exploits
+        modern_exploits = {
+            "${jndi:ldap": "Log4Shell Exploit Versuch (CVE-2021-44228)",
+            "${jndi:dns": "Log4Shell Exploit Versuch (CVE-2021-44228)",
+            "class.module.classloader": "SpringShell Exploit Versuch (CVE-2022-22965)",
+            "/cgi-bin/": "CGI-BIN Scan / Exploit Versuch",
+            "() { :; };": "Shellshock Exploit Versuch (CVE-2014-6271)",
+            ".aws/credentials": "Cloud Credential Theft Versuch",
+            ".ssh/id_rsa": "SSH Key Theft Versuch",
+        }
+        for pattern, reason in modern_exploits.items():
+            if pattern in combined_input:
+                return reason
+
+        # 5. Command Injection
         cmd_patterns = [
             "; curl ",
             "; wget ",
@@ -364,7 +410,7 @@ class IPBlocker:
             "`curl ",
             "`wget ",
         ]
-        if any(pattern in path_lower for pattern in cmd_patterns):
+        if any(pattern in combined_input for pattern in cmd_patterns):
             return "Command Injection Versuch (WAF Heuristik)"
 
         return None
@@ -379,8 +425,6 @@ class IPBlocker:
 
     def _is_datacenter_asn(self, ip: str) -> bool:
         """Heuristic to check if an IP belongs to a Data Center (hosting provider)."""
-        # Get WHOIS info (already has caching in get_whois_info via IPWhois internally if used,
-        # but here we use our own session cache)
         try:
             whois = get_whois_info(ip)
             if not whois:
@@ -480,8 +524,6 @@ class IPBlocker:
             except Exception:
                 return False
 
-        # For other bots (not critical search engines), we trust for now
-        # but could be extended
         return True
 
     def _is_suspicious_path(self, path: str) -> bool:
@@ -521,77 +563,6 @@ class IPBlocker:
             if honey.lower() == path_lower or honey.lower() in path_lower:
                 return True
         return False
-
-    def _is_asn_blocked(self, ip: str) -> bool:
-        """Check if the IP belongs to a blocked ASN."""
-        # 1. Update blocked ASNs cache periodically (or on first use)
-        if not self.blocked_asns:
-            try:
-                asn_list = get_asn_blocklist()
-                self.blocked_asns = {str(row["asn"]) for row in asn_list}
-            except Exception:
-                pass
-
-        if not self.blocked_asns:
-            return False
-
-        # 2. Get ASN for this IP
-        asn = self.ip_asn_cache.get(ip)
-        if not asn:
-            # Slow lookup, only do once per IP per session
-            try:
-                whois = get_whois_info(ip)
-                if whois and whois.get("asn"):
-                    asn = str(whois["asn"])
-                    self.ip_asn_cache[ip] = asn
-            except Exception:
-                return False
-
-        # 3. Check if ASN is in blocklist
-        return asn in self.blocked_asns
-
-    def _is_whitelisted(self, ip: str) -> bool:
-        """Check if IP is in whitelist (local cache or DB)."""
-        if ip in self.whitelisted_ips:
-            return True
-
-        # Check DB
-        try:
-            whitelist = get_whitelist()
-            db_ips = {row["ip_address"] for row in whitelist}
-            # Update local cache
-            self.whitelisted_ips.update(db_ips)
-            return ip in db_ips
-        except Exception:
-            return False
-
-    def _block_ip(self, ip: str, reason: str, block_until: datetime):
-        """Block an IP address."""
-        # Avoid redundant blocking if already in local cache
-        if ip in self.blocked_ips and self.blocked_ips[ip] >= block_until:
-            return
-
-        self.blocked_ips[ip] = block_until
-
-        # Block at firewall level if enabled
-        if self.use_firewall and self._iptables:
-            try:
-                self._iptables.block_ip(ip, reason)
-            except Exception as e:
-                logger.error(f"Failed to block IP {ip} at firewall level: {e}")
-
-        # Block at Cloudflare level if enabled
-        if self._cloudflare:
-            try:
-                self._cloudflare.block_ip(ip, reason)
-            except Exception as e:
-                logger.error(f"Failed to block IP {ip} at Cloudflare level: {e}")
-
-        # Reset counters in DB after blocking
-        try:
-            reset_request_counters(ip)
-        except Exception as e:
-            logger.error(f"Failed to reset request counters in DB: {e}")
 
     def is_blocked(self, ip: str) -> bool:
         """Check if an IP is currently blocked."""
