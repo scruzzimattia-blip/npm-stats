@@ -2,7 +2,6 @@
 
 import unittest
 from unittest.mock import MagicMock, patch
-import subprocess
 
 from src.firewall import IptablesManager
 
@@ -20,9 +19,9 @@ class TestIptablesManager(unittest.TestCase):
         # Mock is_blocked to return False (not already blocked)
         with patch.object(self.manager, "is_blocked", return_value=False):
             mock_run.return_value = MagicMock(returncode=0)
-            
+
             result = self.manager.block_ip("1.2.3.4", "Test reason")
-            
+
             self.assertTrue(result)
             mock_run.assert_called_once()
             args = mock_run.call_args[0][0]
@@ -35,9 +34,9 @@ class TestIptablesManager(unittest.TestCase):
     def test_unblock_ip(self, mock_run):
         """Test unblocking an IP address."""
         mock_run.return_value = MagicMock(returncode=0)
-        
+
         result = self.manager.unblock_ip("1.2.3.4")
-        
+
         self.assertTrue(result)
         mock_run.assert_called_once()
         args = mock_run.call_args[0][0]
@@ -49,9 +48,9 @@ class TestIptablesManager(unittest.TestCase):
         """Test checking if an IP is blocked."""
         # Mock successful check (returncode 0 means rule exists)
         mock_run.return_value = MagicMock(returncode=0)
-        
+
         self.assertTrue(self.manager.is_blocked("1.2.3.4"))
-        
+
         # Mock failed check (returncode != 0 means rule doesn't exist)
         mock_run.return_value = MagicMock(returncode=1)
         self.assertFalse(self.manager.is_blocked("1.1.1.1"))
@@ -60,9 +59,9 @@ class TestIptablesManager(unittest.TestCase):
     def test_create_chain(self, mock_run):
         """Test creating the custom iptables chain."""
         mock_run.return_value = MagicMock(returncode=0)
-        
+
         result = self.manager.create_chain()
-        
+
         self.assertTrue(result)
         # Should call iptables -N and iptables -C/-I
         self.assertGreaterEqual(mock_run.call_count, 2)
@@ -71,9 +70,9 @@ class TestIptablesManager(unittest.TestCase):
     def test_flush_chain(self, mock_run):
         """Test flushing the chain."""
         mock_run.return_value = MagicMock(returncode=0)
-        
+
         result = self.manager.flush_chain()
-        
+
         self.assertTrue(result)
         mock_run.assert_called_once()
         args = mock_run.call_args[0][0]

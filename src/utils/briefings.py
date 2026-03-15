@@ -57,7 +57,7 @@ Antworte direkt mit dem Markdown-Bericht.
     def _get_last_24h_stats(self) -> Dict[str, Any]:
         """Collect aggregated data for the briefing."""
         yesterday = datetime.now(timezone.utc) - timedelta(days=1)
-        
+
         stats = {
             "total_requests": 0,
             "unique_ips": 0,
@@ -81,18 +81,18 @@ Antworte direkt mit dem Markdown-Bericht.
 
                 # Top countries
                 cur.execute("""
-                    SELECT country_code, COUNT(*) as c 
-                    FROM traffic 
-                    WHERE time >= %s AND country_code IS NOT NULL 
+                    SELECT country_code, COUNT(*) as c
+                    FROM traffic
+                    WHERE time >= %s AND country_code IS NOT NULL
                     GROUP BY country_code ORDER BY c DESC LIMIT 3
                 """, (yesterday,))
                 stats["top_countries"] = [f"{r[0]} ({r[1]})" for r in cur.fetchall()]
 
                 # Top reasons
                 cur.execute("""
-                    SELECT reason, COUNT(*) as c 
-                    FROM blocklist 
-                    WHERE blocked_at >= %s 
+                    SELECT reason, COUNT(*) as c
+                    FROM blocklist
+                    WHERE blocked_at >= %s
                     GROUP BY reason ORDER BY c DESC LIMIT 3
                 """, (yesterday,))
                 stats["top_reasons"] = [f"{r[0]} ({r[1]})" for r in cur.fetchall()]

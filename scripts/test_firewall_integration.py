@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Integration test for Firewall Blocking."""
 
-import sys
-import os
 import subprocess
+import sys
 from pathlib import Path
 
 # Add project root to path
@@ -11,11 +10,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.firewall import get_iptables_manager
 
+
 def run_test():
     print("--- NPM Monitor: Firewall Integration Test ---")
-    
+
     manager = get_iptables_manager()
-    
+
     if not manager.available:
         print("❌ FEHLER: iptables ist auf diesem System nicht verfügbar.")
         return
@@ -40,7 +40,7 @@ def run_test():
         if manager.block_ip(test_ip, test_reason):
             print(f"   ✅ IP {test_ip} wurde blockiert.")
         else:
-            print(f"   ❌ Fehler beim Blockieren der IP.")
+            print("   ❌ Fehler beim Blockieren der IP.")
 
         # 3. Verifizieren via CLI call
         print("\n3. Verifiziere Regel in iptables...")
@@ -68,7 +68,7 @@ def run_test():
 
     except Exception as e:
         print(f"❌ Unerwarteter Fehler: {e}")
-    
+
     print("\n--- Test Abgeschlossen ---")
 
 if __name__ == "__main__":

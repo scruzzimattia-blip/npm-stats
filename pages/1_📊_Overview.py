@@ -116,10 +116,10 @@ def main():
     with tab3:
         st.subheader("🤖 KI Sicherheits-Briefing")
         st.markdown("""
-        Lasse dir eine KI-gestützte Analyse der Sicherheitslage der letzten 24 Stunden erstellen. 
+        Lasse dir eine KI-gestützte Analyse der Sicherheitslage der letzten 24 Stunden erstellen.
         Die KI analysiert Trends, blockierte IPs und verdächtige Muster.
         """)
-        
+
         if st.button("✨ Bericht generieren", use_container_width=True):
             from src.utils.briefings import SecurityBriefing
             briefing = SecurityBriefing()
