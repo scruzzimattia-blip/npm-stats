@@ -1013,7 +1013,7 @@ def get_protocol_distribution(
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
     query = f"""
-        SELECT 
+        SELECT
             COALESCE(protocol, 'unknown') as protocol,
             COUNT(*) as request_count,
             SUM(response_length) as total_bytes
@@ -1048,9 +1048,9 @@ def get_status_distribution(
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
     query = f"""
-        SELECT 
+        SELECT
             status,
-            CASE 
+            CASE
                 WHEN status < 200 THEN '1xx Informational'
                 WHEN status < 300 THEN '2xx Success'
                 WHEN status < 400 THEN '3xx Redirection'
@@ -1089,7 +1089,7 @@ def get_method_distribution(
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
     query = f"""
-        SELECT 
+        SELECT
             method,
             COUNT(*) as request_count,
             SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as error_count

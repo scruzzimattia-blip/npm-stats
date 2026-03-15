@@ -109,8 +109,10 @@ class AIAnalyzer:
             # 5. Permanent block for Critical threats
             if threat_level == "Critical":
                 from datetime import datetime, timedelta, timezone
-                from src.database import add_blocked_ip, get_connection
+
                 import psycopg.rows as psycopg_rows
+
+                from src.database import add_blocked_ip, get_connection
 
                 with get_connection() as conn:
                     with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
