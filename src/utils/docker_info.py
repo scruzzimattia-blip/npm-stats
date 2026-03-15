@@ -14,13 +14,22 @@ logger = logging.getLogger(__name__)
 def get_docker_client():
     """Create a Docker client if available."""
     if docker is None:
+        logger.error("Docker library not installed.")
         return None
     
     try:
+        # Check if socket exists
+        if not os.path.exists("/var/run/docker.sock"):
+            logger.debug("Docker socket /var/run/docker.sock not found.")
+            return None
+            
         # Connect via default socket
-        return docker.from_env()
+        client = docker.from_env()
+        # Test connection
+        client.ping()
+        return client
     except Exception as e:
-        logger.debug(f"Docker connection failed: {e}")
+        logger.warning(f"Docker connection failed (check permissions): {e}")
         return None
 
 def get_container_status() -> List[Dict[str, Any]]:
