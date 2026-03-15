@@ -157,8 +157,29 @@ def render_bandwidth_analysis(df: pd.DataFrame) -> None:
         pcol3.metric("p99", format_bytes(int(percentiles["p99"])))
 
 
-def render_geo_analysis(df: pd.DataFrame) -> None:
-    """Render geographic analysis if GeoIP data available."""
+def render_geo_analysis(df: pd.DataFrame, geo_stats: Optional[Dict[str, pd.DataFrame]] = None) -> None:
+    """Render geographic analysis if GeoIP data available (optimized)."""
+    if geo_stats and not geo_stats.get("countries", pd.DataFrame()).empty:
+        st.divider()
+        with st.expander("Geografische Analyse", expanded=True):
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.write("**Top 10 Länder**")
+                country_df = geo_stats["countries"].copy()
+                country_df.columns = ["Land", "Requests", "Fehler"]
+                st.dataframe(country_df[["Land", "Requests"]].head(10), width="stretch", hide_index=True)
+
+            with col2:
+                city_df = geo_stats.get("cities", pd.DataFrame())
+                if not city_df.empty:
+                    st.write("**Top 10 Städte**")
+                    city_display = city_df.copy()
+                    city_display.columns = ["Stadt", "Requests"]
+                    st.dataframe(city_display.head(10), width="stretch", hide_index=True)
+        return
+
+    # Fallback to pandas aggregation
     if df.empty:
         return
 

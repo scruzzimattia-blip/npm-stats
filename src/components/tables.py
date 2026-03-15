@@ -49,38 +49,63 @@ def render_metrics(data: Union[pd.DataFrame, Dict[str, Any]]) -> None:
         col6.metric("Länder", format_number(distinct_countries))
 
 
-def render_geo_summary(df: pd.DataFrame) -> None:
+def render_geo_summary(df: pd.DataFrame, geo_stats: Optional[Dict[str, pd.DataFrame]] = None) -> None:
     """Render a detailed table of geographic traffic distribution."""
-    if df.empty or "country_code" not in df.columns:
-        return
+    if geo_stats and not geo_stats.get("countries", pd.DataFrame()).empty:
+        # Use optimized DB aggregation
+        country_df = geo_stats["countries"]
+        city_df = geo_stats.get("cities", pd.DataFrame())
 
-    st.subheader("📊 Top Länder nach Traffic")
-    
-    # Calculate stats per country
-    geo_stats = df.groupby("country_code").agg({
-        "remote_addr": ["count", "nunique"],
-        "status": lambda x: (x >= 400).sum()
-    }).reset_index()
-    
-    geo_stats.columns = ["Land", "Requests", "Eindeutige IPs", "Fehler"]
-    geo_stats = geo_stats.sort_values("Requests", ascending=False).head(15)
-    
-    # Add error rate
-    geo_stats["Fehlerrate"] = (geo_stats["Fehler"] / geo_stats["Requests"] * 100).round(1).astype(str) + "%"
-    
-    st.dataframe(
-        geo_stats[["Land", "Requests", "Eindeutige IPs", "Fehlerrate"]],
-        use_container_width=True,
-        hide_index=True
-    )
+        st.subheader("📊 Top Länder nach Traffic")
+        display_df = country_df.copy()
+        display_df.columns = ["Land", "Requests", "Fehler"]
+        display_df["Eindeutige IPs"] = "N/A" # We skipped COUNT(DISTINCT) for performance, show N/A or calculate differently
+        display_df["Fehlerrate"] = (display_df["Fehler"] / display_df["Requests"] * 100).round(1).astype(str) + "%"
 
-    st.subheader("🏙️ Top Städte")
-    city_stats = df.groupby(["city", "country_code"]).size().reset_index(name="Requests")
-    city_stats = city_stats.sort_values("Requests", ascending=False).head(15)
-    city_stats.columns = ["Stadt", "Land", "Requests"]
-    
-    st.dataframe(city_stats, use_container_width=True, hide_index=True)
+        st.dataframe(
+            display_df[["Land", "Requests", "Eindeutige IPs", "Fehlerrate"]].head(15),
+            use_container_width=True,
+            hide_index=True
+        )
 
+        st.subheader("🏙️ Top Städte")
+        if not city_df.empty:
+            city_display = city_df.copy()
+            city_display.columns = ["Stadt", "Requests"]
+            city_display["Land"] = "N/A" # Simplified for performance
+            st.dataframe(city_display[["Stadt", "Land", "Requests"]].head(15), use_container_width=True, hide_index=True)
+
+    else:
+        # Fallback to pandas aggregation if no geo_stats provided
+        if df.empty or "country_code" not in df.columns:
+            return
+
+        st.subheader("📊 Top Länder nach Traffic")
+
+        # Calculate stats per country
+        geo_agg = df.groupby("country_code").agg({
+            "remote_addr": ["count", "nunique"],
+            "status": lambda x: (x >= 400).sum()
+        }).reset_index()
+
+        geo_agg.columns = ["Land", "Requests", "Eindeutige IPs", "Fehler"]
+        geo_agg = geo_agg.sort_values("Requests", ascending=False).head(15)
+
+        # Add error rate
+        geo_agg["Fehlerrate"] = (geo_agg["Fehler"] / geo_agg["Requests"] * 100).round(1).astype(str) + "%"
+
+        st.dataframe(
+            geo_agg[["Land", "Requests", "Eindeutige IPs", "Fehlerrate"]],
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.subheader("🏙️ Top Städte")
+        city_stats = df.groupby(["city", "country_code"]).size().reset_index(name="Requests")
+        city_stats = city_stats.sort_values("Requests", ascending=False).head(15)
+        city_stats.columns = ["Stadt", "Land", "Requests"]
+
+        st.dataframe(city_stats, use_container_width=True, hide_index=True)
 
 def render_top_ips(df: pd.DataFrame, top_ips_summary: pd.DataFrame = None) -> None:
     """Render top IP addresses analysis with optimized summary."""

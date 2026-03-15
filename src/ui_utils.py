@@ -87,6 +87,19 @@ def _cached_db_info():
 
 
 @st.cache_data(ttl=600)
+def _cached_geo_summary(
+    hosts: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+):
+    from .database import get_geo_summary
+    return get_geo_summary(
+        hosts=list(hosts) if hosts else None,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+@st.cache_data(ttl=600)
 def _cached_hourly_summary(
     hosts: Optional[List[str]] = None,
     start_date: Optional[datetime] = None,

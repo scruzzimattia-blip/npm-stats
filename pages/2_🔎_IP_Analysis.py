@@ -41,6 +41,14 @@ def main():
         end_date=end_date,
         limit=5000 # More data for geo analysis
     )
+    
+    # Load optimized aggregated geo data
+    from src.ui_utils import _cached_geo_summary
+    geo_stats = _cached_geo_summary(
+        hosts=selected_hosts,
+        start_date=start_date,
+        end_date=end_date
+    )
 
     # Main Row: Map and Geo Table
     col_map, col_stats = st.columns([2, 1])
@@ -49,14 +57,14 @@ def main():
         render_geo_map(df)
     
     with col_stats:
-        render_geo_summary(df)
+        render_geo_summary(df, geo_stats)
     
     st.divider()
     
     # Analysis Row
     col1, col2 = st.columns(2)
     with col1:
-        render_geo_analysis(df)
+        render_geo_analysis(df, geo_stats)
     with col2:
         render_user_agent_analysis(df)
         

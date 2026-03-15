@@ -614,6 +614,68 @@ def get_top_ips_summary(
             return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
+def get_geo_summary(
+    hosts: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+) -> Dict[str, pd.DataFrame]:
+    """Get optimized geographic aggregations directly from the database."""
+    conditions = []
+    params: List[Any] = []
+
+    if hosts:
+        conditions.append("host = ANY(%s)")
+        params.append(list(hosts))
+    if start_date:
+        conditions.append("time >= %s")
+        params.append(start_date)
+    if end_date:
+        conditions.append("time <= %s")
+        params.append(end_date)
+
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            # Get country stats
+            cur.execute(
+                f"""
+                SELECT
+                    country_code,
+                    COUNT(*) as request_count,
+                    SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as error_count
+                FROM traffic
+                {where_clause} AND country_code IS NOT NULL
+                GROUP BY country_code
+                ORDER BY request_count DESC
+                LIMIT 50;
+                """,
+                params or None,
+            )
+            country_rows = cur.fetchall()
+            
+            # Get city stats
+            cur.execute(
+                f"""
+                SELECT
+                    city,
+                    COUNT(*) as request_count
+                FROM traffic
+                {where_clause} AND city IS NOT NULL
+                GROUP BY city
+                ORDER BY request_count DESC
+                LIMIT 50;
+                """,
+                params or None,
+            )
+            city_rows = cur.fetchall()
+
+            return {
+                "countries": pd.DataFrame(country_rows) if country_rows else pd.DataFrame(),
+                "cities": pd.DataFrame(city_rows) if city_rows else pd.DataFrame()
+            }
+
+
 # Blocklist operations
 def add_blocked_ip(
     ip_address: str, reason: str, block_until: datetime, is_manual: bool = False
