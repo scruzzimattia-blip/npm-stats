@@ -188,6 +188,19 @@ def check_auth() -> bool:
                         _record_successful_attempt(client_ip)
                         st.session_state.authenticated = True
                         st.session_state.user = user
+                        
+                        # Auto-Whitelist admin IP
+                        try:
+                            from .blocking import get_blocker
+                            blocker = get_blocker()
+                            blocker.whitelist_ip(client_ip)
+                            # Also persist to DB if possible
+                            from .database import add_to_whitelist
+                            add_to_whitelist(client_ip, f"Auto-Whitelist via MFA Login ({username})")
+                            logger.info(f"IP {client_ip} auto-whitelisted after successful login for user {username}")
+                        except Exception as e:
+                            logger.error(f"Failed to auto-whitelist IP: {e}")
+                            
                         st.rerun()
                     else:
                         _record_failed_attempt(client_ip)
