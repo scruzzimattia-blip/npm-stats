@@ -22,7 +22,6 @@ from src.components import (
 )
 from src.database import get_traffic_count, get_latest_logs, get_traffic_spike_metrics
 from src.utils.reports import generate_pdf_report
-from src.utils.health import check_npm_status
 from src.config import app_config
 
 def main():
@@ -46,16 +45,6 @@ def main():
                 f"Anfragerate: {spike_info['current_rate']} req/min (Normal: {spike_info['baseline_rate']} req/min)\n"
                 f"Anzahl Anfragen (5m): {spike_info['recent_count']}"
             )
-
-    # System Status
-    with st.expander("🛠️ System Status", expanded=False):
-        status = check_npm_status()
-        cols = st.columns(3)
-        port_labels = {80: "HTTP (80)", 443: "HTTPS (443)", 81: "Admin (81)"}
-        for i, port in enumerate((80, 443, 81)):
-            is_up = status.get(port, False)
-            color = "🟢 Online" if is_up else "🔴 Offline"
-            cols[i].metric(port_labels[port], color)
 
     # Load data
     metrics = _cached_traffic_metrics(hosts=selected_hosts, start_date=start_date, end_date=end_date)

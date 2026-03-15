@@ -185,10 +185,32 @@ def render_request_log(df: pd.DataFrame) -> None:
 
 def render_npm_hosts_status() -> None:
     """Render Nginx Proxy Manager hosts and their health status."""
-    st.subheader("Nginx Proxy Manager Hosts & Uptime")
-    from ..utils.npm_sync import fetch_npm_proxy_hosts
+    from ..utils.npm_sync import fetch_npm_proxy_hosts, check_all_hosts_health
     from ..database import get_all_host_health
+    from ..utils.health import check_npm_status
     
+    st.subheader("🛠️ NPM System Status")
+    status = check_npm_status()
+    cols = st.columns(3)
+    port_labels = {80: "HTTP (80)", 443: "HTTPS (443)", 81: "Admin (81)"}
+    for i, port in enumerate((80, 443, 81)):
+        is_up = status.get(port, False)
+        color = "🟢 Online" if is_up else "🔴 Offline"
+        cols[i].metric(port_labels[port], color)
+    
+    st.divider()
+    
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.subheader("🌐 NPM Hosts & Uptime")
+    with col2:
+        if st.button("🔄 Status aktualisieren", use_container_width=True):
+            with st.spinner("Prüfe Hosts..."):
+                check_all_hosts_health()
+                st.cache_data.clear()
+                st.success("Status aktualisiert!")
+                st.rerun()
+
     npm_hosts = fetch_npm_proxy_hosts()
     health_data = {h['host']: h for h in get_all_host_health()}
     

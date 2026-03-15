@@ -50,11 +50,17 @@ def fetch_npm_proxy_hosts() -> List[Dict[str, Any]]:
         with engine.connect() as conn:
             result = conn.execute(text(query))
             for row in result:
-                # domain_names is usually a JSON-like string in NPM
-                # We'll just clean it up a bit
-                domains = row[0].replace('[', '').replace(']', '').replace('"', '').split(',')
+                # domain_names is usually a JSON-like string in NPM, e.g. ["domain.com"]
+                raw_domains = row[0]
+                if isinstance(raw_domains, str):
+                    # Remove JSON array characters and quotes
+                    clean_domains = raw_domains.strip('[]"\'').split(',')
+                    domains = [d.strip(' "\'') for d in clean_domains if d.strip(' "\'')]
+                else:
+                    domains = []
+
                 hosts.append({
-                    "domains": [d.strip() for p in domains for d in p.split(',') if d.strip()],
+                    "domains": domains,
                     "forward": f"{row[1]}:{row[2]}",
                     "enabled": bool(row[3]),
                     "ssl": bool(row[4]),
