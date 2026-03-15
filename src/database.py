@@ -326,11 +326,27 @@ def get_tracked_ip_count() -> int:
 
 
 def cleanup_old_data(days: Optional[int] = None) -> int:
-    """Delete data older than specified days. Returns number of deleted rows."""
+    """Archive old data to CSV and delete from DB. Returns number of deleted rows."""
     retention_days = days if days is not None else app_config.retention_days
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    
+    archive_dir = Path("archives")
+    archive_dir.mkdir(exist_ok=True)
+    
+    archive_file = archive_dir / f"traffic_archive_{cutoff_date.strftime('%Y%m%d')}.csv.gz"
 
     with get_connection() as conn:
+        # 1. Export to CSV before deletion
+        try:
+            query = "SELECT * FROM traffic WHERE time < %s"
+            df = pd.read_sql(query, get_engine(), params=(cutoff_date,))
+            if not df.empty:
+                df.to_csv(archive_file, index=False, compression="gzip")
+                logger.info(f"Archived {len(df)} rows to {archive_file}")
+        except Exception as e:
+            logger.error(f"Failed to archive data: {e}")
+
+        # 2. Perform deletion
         with conn.cursor() as cur:
             cur.execute("DELETE FROM traffic WHERE time < %s", (cutoff_date,))
             deleted = cur.rowcount

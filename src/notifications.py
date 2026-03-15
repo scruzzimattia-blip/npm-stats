@@ -11,7 +11,34 @@ from .config import app_config
 logger = logging.getLogger(__name__)
 
 
-def send_notification(ip: str, reason: str, block_until: datetime) -> bool:
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+def send_email_notification(subject: str, body: str):
+    """Send an email notification via SMTP."""
+    if not app_config.smtp_host or not app_config.smtp_to:
+        return
+
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = app_config.smtp_from
+        msg['To'] = app_config.smtp_to
+        msg['Subject'] = subject
+
+        msg.attach(MIMEText(body, 'plain'))
+
+        with smtplib.SMTP(app_config.smtp_host, app_config.smtp_port) as server:
+            if app_config.smtp_user and app_config.smtp_password:
+                server.starttls()
+                server.login(app_config.smtp_user, app_config.smtp_password)
+            server.send_message(msg)
+
+        logger.info(f"Email notification sent to {app_config.smtp_to}")
+    except Exception as e:
+        logger.error(f"Failed to send email notification: {e}")
+
+def send_notification(ip: str, reason: str, block_until: datetime):
     """Send a notification via webhook (Discord, Slack, Telegram or generic)."""
     if not app_config.notify_on_block:
         return False

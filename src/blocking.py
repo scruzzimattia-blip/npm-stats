@@ -103,13 +103,13 @@ class IPBlocker:
             send_notification(ip, waf_reason, block_until)
             return waf_reason
 
-        # 1. Check for immediate ban (Honey-Paths)
+        # 1. Deceptive Defense: Honey-Paths (1-year ban)
         if self._is_honey_path(path):
-            reason = f"Honey-Path aufgerufen: {path}"
-            # Immediate long-term block (default duration * 24 for 1 day or similar)
-            block_until = datetime.now(timezone.utc) + timedelta(seconds=app_config.block_duration * 24)
+            reason = f"Honeypot ausgelöst: {path}"
+            # Immediate 1-year block for accessing critical bait paths
+            block_until = datetime.now(timezone.utc) + timedelta(days=365)
             self._block_ip(ip, reason, block_until)
-            logger.warning(f"INSTANT BLOCK for IP {ip}: {reason}")
+            logger.warning(f"DECEPTIVE DEFENSE: 1-YEAR BLOCK for IP {ip}: {reason}")
             send_notification(ip, reason, block_until)
             return reason
 
@@ -211,8 +211,22 @@ class IPBlocker:
         return False
 
     def _is_honey_path(self, path: str) -> bool:
-        """Check if path is a honey path (immediate ban)."""
+        """Check if path is a honey path (immediate 1-year ban for critical bait)."""
         path_lower = path.lower()
+        
+        # Enterprise Bait Paths
+        bait_paths = [
+            "/.env", "/.git", "/wp-config.php", "/config.php", 
+            "/phpmyadmin", "/myadmin", "/pma", 
+            "/admin/config.php", "/backup.sql", "/dump.sql",
+            "/.aws/credentials", "/.ssh/id_rsa"
+        ]
+        
+        for honey in bait_paths:
+            if honey.lower() == path_lower or honey.lower() in path_lower:
+                return True
+        
+        # User defined honey paths
         for honey in app_config.honey_paths:
             if honey.lower() == path_lower or honey.lower() in path_lower:
                 return True
