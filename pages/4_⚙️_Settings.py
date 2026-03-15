@@ -88,6 +88,12 @@ def main():
                 help="Pfade, die sofort als verdächtig markiert werden (z.B. /wp-admin)"
             )
 
+            sensitive_paths = st.text_area(
+                "Sensible Pfade (STRENGE BESTRAFUNG, kommagetrennt)", 
+                value=",".join(app_config.sensitive_paths),
+                help="Fehler auf diesen Pfaden (z.B. /login) erhöhen den Bedrohungsscore dreifach."
+            )
+
             honey_paths = st.text_area(
                 "🍯 Honey-Paths (SOFORT-SPERRE, kommagetrennt)", 
                 value=",".join(app_config.honey_paths),
@@ -105,6 +111,7 @@ def main():
                 update_setting("max_requests_per_minute", max_rate)
                 update_setting("block_duration", block_dur)
                 update_setting("suspicious_paths", suspicious_paths)
+                update_setting("sensitive_paths", sensitive_paths)
                 update_setting("honey_paths", honey_paths)
                 update_setting("enable_blocking", enable_blocking)
                 st.success("Sicherheitseinstellungen gespeichert!")

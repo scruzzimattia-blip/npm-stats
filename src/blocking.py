@@ -114,6 +114,14 @@ class IPBlocker:
                 logger.warning(f"SPOOFING DETECTED: IP {ip} claims to be {user_agent}")
                 return reason
 
+        # 0.3 Context & ASN Multiplier
+        multiplier = 1.0
+        if self._is_sensitive_path(path):
+            multiplier *= 3.0  # Errors on sensitive paths are much worse
+        
+        if self._is_datacenter_asn(ip):
+            multiplier *= 2.0  # Traffic from Data Centers is more suspicious
+
         # WAF: User-Agent Check
         if self._is_malicious_user_agent(user_agent):
             reason = f"Bösartiger User-Agent erkannt: {user_agent}"
@@ -123,7 +131,7 @@ class IPBlocker:
             send_notification(ip, reason, block_until)
             return reason
 
-        # WAF: SQLi / XSS Check
+        # WAF: SQLi / XSS / Traversal Check
         waf_reason = self._check_waf_rules(path)
         if waf_reason:
             block_until = datetime.now(timezone.utc) + timedelta(seconds=app_config.block_duration * 24)
@@ -147,7 +155,24 @@ class IPBlocker:
         
         # Update counters in DB and get current totals
         try:
+            # We apply the multiplier manually to the threat score increment
+            # (Note: database.py doesn't know about the multiplier yet, so we use a separate update)
             counts = update_request_counters(ip, status, is_suspicious)
+            
+            # Apply multiplier to existing increment logic
+            if multiplier > 1.0:
+                score_to_add = 0
+                if is_suspicious: score_to_add = 30 * (multiplier - 1)
+                elif status == 403: score_to_add = 20 * (multiplier - 1)
+                elif status == 404: score_to_add = 5 * (multiplier - 1)
+                
+                if score_to_add > 0:
+                    from .database import update_threat_score
+                    update_threat_score(ip, int(score_to_add))
+                    # Refresh counts
+                    from .database import get_redis
+                    counts["threat_score"] = int(get_redis().hget(f"tracker:{ip}", "threat_score") or 0)
+
         except Exception as e:
             logger.error(f"Failed to update request counters in DB: {e}")
             return None
@@ -185,13 +210,13 @@ class IPBlocker:
         return any(bad_ua in ua_lower for bad_ua in bad_uas)
 
     def _check_waf_rules(self, path: str) -> Optional[str]:
-        """Check for SQLi or XSS patterns in the request path/query."""
+        """Check for SQLi, XSS, Path Traversal or Command Injection patterns."""
         if not path:
             return None
             
         path_lower = path.lower()
         
-        # Basic SQLi heuristic
+        # 1. SQLi heuristic
         sqli_patterns = [
             "union select", "union all select", "' or '1'='1", '" or "1"="1',
             "@@version", "information_schema", "sysobjects", "syscolumns"
@@ -199,14 +224,65 @@ class IPBlocker:
         if any(pattern in path_lower for pattern in sqli_patterns):
             return "SQL-Injection Versuch (WAF Heuristik)"
             
-        # Basic XSS heuristic
+        # 2. XSS heuristic
         xss_patterns = [
             "<script", "%3cscript", "javascript:", "onerror=", "onload=", "alert("
         ]
         if any(pattern in path_lower for pattern in xss_patterns):
             return "XSS Versuch (WAF Heuristik)"
             
+        # 3. Path Traversal
+        traversal_patterns = [
+            "../", "..\\", "/etc/passwd", "/etc/shadow", "/etc/group",
+            "c:\\windows", "boot.ini", "/proc/self"
+        ]
+        if any(pattern in path_lower for pattern in traversal_patterns):
+            return "Path Traversal Versuch (WAF Heuristik)"
+            
+        # 4. Command Injection
+        cmd_patterns = [
+            "; curl ", "; wget ", "; chmod ", "; chown ", "; rm -rf",
+            "| curl ", "| wget ", "| chmod ", "`curl ", "`wget "
+        ]
+        if any(pattern in path_lower for pattern in cmd_patterns):
+            return "Command Injection Versuch (WAF Heuristik)"
+            
         return None
+
+    def _is_sensitive_path(self, path: str) -> bool:
+        """Check if path is highly sensitive (Login, Admin, etc.)."""
+        path_lower = path.lower()
+        for sensitive in app_config.sensitive_paths:
+            if sensitive.lower() in path_lower:
+                return True
+        return False
+
+    def _is_datacenter_asn(self, ip: str) -> bool:
+        """Heuristic to check if an IP belongs to a Data Center (hosting provider)."""
+        # Get WHOIS info (already has caching in get_whois_info via IPWhois internally if used, 
+        # but here we use our own session cache)
+        try:
+            whois = get_whois_info(ip)
+            if not whois:
+                return False
+                
+            desc = whois.get("asn_description", "").lower()
+            net_name = whois.get("network_name", "").lower()
+            
+            # Known Data Center / Hosting keywords
+            dc_keywords = [
+                "hetzner", "digitalocean", "amazon", "aws", "google cloud", 
+                "ovh", "linode", "vultr", "leaseweb", "contabo", "intergrid", 
+                "hosting", "server", "cloud", "datacenter", "m247", "akamai"
+            ]
+            
+            for kw in dc_keywords:
+                if kw in desc or kw in net_name:
+                    return True
+        except Exception:
+            pass
+            
+        return False
 
     def _check_thresholds(self, counts: Dict[str, int]) -> Optional[str]:
         """Check if IP exceeds any threshold based on DB counts or threat score."""

@@ -65,6 +65,16 @@ class AppConfig:
             if p.strip()
         ]
     )
+    sensitive_paths: List[str] = field(
+        default_factory=lambda: [
+            p.strip()
+            for p in os.getenv(
+                "SENSITIVE_PATHS",
+                "/login,/admin,/api/auth,/config,/setup,/install,/manage,/db-admin",
+            ).split(",")
+            if p.strip()
+        ]
+    )
     max_suspicious_paths: int = field(default_factory=lambda: int(os.getenv("MAX_SUSPICIOUS_PATHS", "5")))
     honey_paths: List[str] = field(
         default_factory=lambda: [
