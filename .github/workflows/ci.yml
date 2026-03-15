@@ -66,6 +66,9 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [ui, worker, ai, api]
     steps:
       - uses: actions/checkout@v4
 
@@ -77,10 +80,10 @@ jobs:
         with:
           context: .
           push: false
-          tags: npm-monitor:test
+          tags: npm-monitor:${{ matrix.service }}-test
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Test Docker image
         run: |
-          docker run --rm npm-monitor:test python --version
+          docker run --rm npm-monitor:${{ matrix.service }}-test python --version

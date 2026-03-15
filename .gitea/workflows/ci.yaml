@@ -69,3 +69,18 @@ jobs:
             docker tag "${BASE_TAG}:${VERSION}" "${BASE_TAG}:latest"
             docker push "${BASE_TAG}:latest"
           fi
+          
+      - name: Build and Push API
+        run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          BASE_TAG="192.168.1.41:3000/${REPO_OWNER}/${REPO_NAME}/npm-api"
+          
+          docker build -t "${BASE_TAG}:${VERSION}" .
+          docker push "${BASE_TAG}:${VERSION}"
+          
+          if [ "$VERSION" != "latest" ]; then
+            docker tag "${BASE_TAG}:${VERSION}" "${BASE_TAG}:latest"
+            docker push "${BASE_TAG}:latest"
+          fi
