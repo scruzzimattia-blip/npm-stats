@@ -132,8 +132,9 @@ def render_blocked_ips():
                     "IP Adresse": r["ip_address"],
                     "Grund": r["reason"],
                     "Gesperrt seit": r["blocked_at"].strftime("%Y-%m-%d %H:%M"),
-                    "Bis": r["block_until"].strftime("%Y-%m-%d %H:%M"),
+                    "Bis": "PERMANENT" if r.get("is_permanent") else r["block_until"].strftime("%Y-%m-%d %H:%M"),
                     "Typ": "👤 Manuell" if r["is_manual"] else "🤖 Auto",
+                    "Permanent": "🔒 Ja" if r.get("is_permanent") else "➖",
                     "KI": "🧠 Ja" if r["ai_report_count"] > 0 else "➖",
                 }
             )

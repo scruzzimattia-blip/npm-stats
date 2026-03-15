@@ -105,6 +105,23 @@ class AIAnalyzer:
             # 4. Save to DB
             add_ai_report(ip_address, full_report, threat_level, self.model)
             logger.info(f"AI analysis completed for {ip_address}. Threat Level: {threat_level}")
+
+            # 5. Permanent block for Critical threats
+            if threat_level == "Critical":
+                from datetime import datetime, timedelta, timezone
+                from src.database import add_blocked_ip, get_connection
+                import psycopg.rows as psycopg_rows
+
+                with get_connection() as conn:
+                    with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+                        cur.execute("SELECT reason FROM blocklist WHERE ip_address = %s LIMIT 1", (ip_address,))
+                        row = cur.fetchone()
+                        if row:
+                            reason = row["reason"]
+                            block_until = datetime.now(timezone.utc) + timedelta(days=365 * 10)  # 10 years
+                            add_blocked_ip(ip_address, reason, block_until, is_permanent=True)
+                            logger.info(f"PERMANENT BLOCK applied for {ip_address} due to Critical threat level")
+
             return {"report": full_report, "threat_level": threat_level}
 
         except Exception as e:

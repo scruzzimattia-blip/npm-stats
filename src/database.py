@@ -687,22 +687,25 @@ def get_geo_summary(
 
 
 # Blocklist operations
-def add_blocked_ip(ip_address: str, reason: str, block_until: datetime, is_manual: bool = False) -> bool:
+def add_blocked_ip(
+    ip_address: str, reason: str, block_until: datetime, is_manual: bool = False, is_permanent: bool = False
+) -> bool:
     """Add an IP address to the blocklist. Increments block_count on conflict."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO blocklist (ip_address, reason, block_until, is_manual, block_count)
-                VALUES (%s, %s, %s, %s, 1)
+                INSERT INTO blocklist (ip_address, reason, block_until, is_manual, block_count, is_permanent)
+                VALUES (%s, %s, %s, %s, 1, %s)
                 ON CONFLICT (ip_address) DO UPDATE
                 SET reason = EXCLUDED.reason,
                     block_until = EXCLUDED.block_until,
                     is_manual = EXCLUDED.is_manual,
                     unblocked_at = NULL,
-                    block_count = blocklist.block_count + 1;
+                    block_count = blocklist.block_count + 1,
+                    is_permanent = EXCLUDED.is_permanent;
                 """,
-                (ip_address, reason, block_until, is_manual),
+                (ip_address, reason, block_until, is_manual, is_permanent),
             )
             return True
 
@@ -735,10 +738,10 @@ def unblock_ip(ip_address: str) -> bool:
 
 def get_blocked_ips(active_only: bool = True) -> List[Tuple]:
     """Get all blocked IPs from the database."""
-    query = "SELECT ip_address, reason, blocked_at, block_until, is_manual FROM blocklist"
+    query = "SELECT ip_address, reason, blocked_at, block_until, is_manual, is_permanent FROM blocklist"
     if active_only:
-        query += " WHERE unblocked_at IS NULL AND block_until > NOW()"
-    query += " ORDER BY blocked_at DESC"
+        query += " WHERE unblocked_at IS NULL AND (block_until > NOW() OR is_permanent = TRUE)"
+    query += " ORDER BY is_permanent DESC, blocked_at DESC"
 
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -750,11 +753,11 @@ def get_blocklist_with_ai_status() -> List[Dict[str, Any]]:
     """Get the active blocklist with AI analysis status."""
     query = """
         SELECT
-            b.ip_address, b.reason, b.blocked_at, b.block_until, b.is_manual,
+            b.ip_address, b.reason, b.blocked_at, b.block_until, b.is_manual, b.is_permanent,
             (SELECT COUNT(*) FROM ai_analysis a WHERE a.ip_address = b.ip_address) as ai_report_count
         FROM blocklist b
-        WHERE b.block_until > NOW() AND b.unblocked_at IS NULL
-        ORDER BY b.blocked_at DESC;
+        WHERE (b.block_until > NOW() OR b.is_permanent = TRUE) AND b.unblocked_at IS NULL
+        ORDER BY b.is_permanent DESC, b.blocked_at DESC;
     """
     with get_connection() as conn:
         with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
@@ -806,7 +809,7 @@ def cleanup_expired_blocks() -> int:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE blocklist SET unblocked_at = NOW() WHERE unblocked_at IS NULL AND block_until <= NOW();"
+                "UPDATE blocklist SET unblocked_at = NOW() WHERE unblocked_at IS NULL AND block_until <= NOW() AND is_permanent = FALSE;"
             )
             return cur.rowcount
 

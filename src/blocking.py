@@ -89,7 +89,7 @@ class IPBlocker:
 
             logger.info(f"Restoring {len(active_blocks)} active blocks to firewall...")
             count = 0
-            for ip, reason, _, _, _ in active_blocks:
+            for ip, reason, _, _, _, _ in active_blocks:
                 if self._iptables.block_ip(ip, f"RESTORED: {reason}"):
                     count += 1
             logger.info(f"Successfully restored {count} firewall rules.")
@@ -644,8 +644,10 @@ class IPBlocker:
             logger.info(f"IP {ip} has been unblocked")
             # Audit log
             from streamlit import session_state
+
             username = session_state.get("user", {}).get("username", "system")
             from .database import add_audit_log
+
             add_audit_log(username, "UNBLOCK", ip, "Manuelle Entsperrung via Dashboard")
 
         return unblocked
@@ -659,8 +661,10 @@ class IPBlocker:
 
         # Audit log
         from streamlit import session_state
+
         username = session_state.get("user", {}).get("username", "system")
         from .database import add_audit_log
+
         add_audit_log(username, "WHITELIST_ADD", ip, reason)
 
     def remove_from_whitelist(self, ip: str):
@@ -670,8 +674,10 @@ class IPBlocker:
 
         # Audit log
         from streamlit import session_state
+
         username = session_state.get("user", {}).get("username", "system")
         from .database import add_audit_log
+
         add_audit_log(username, "WHITELIST_REMOVE", ip)
 
     def get_blocked_ips(self) -> Dict[str, datetime]:
