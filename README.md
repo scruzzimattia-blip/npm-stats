@@ -9,6 +9,10 @@ Ein hochperformantes, KI-gestütztes Security-Ökosystem für den **Nginx Proxy 
 
 ## 🚀 Enterprise-Highlights (V2 & V3)
 
+- **🛡️ Auto-Healing Firewall**: Erkennt Manipulationen an der Firewall und stellt die `NPM_MONITOR` Sperrkette automatisch wieder her (alle 10 Min).
+- **🏥 System Health Dashboard**: Zentrale Überwachung aller Komponenten (DB, Redis, Log-Worker, Firewall) auf einer neuen Status-Seite.
+- **📜 Audit Logging**: Lückenlose Historie aller administrativen Aktionen wie Unblocks und Whitelisting für volle Revisionssicherheit.
+- **🧪 Test Alert Function**: Teste deine Benachrichtigungskanäle (Webhook, Telegram, Email) direkt aus den Einstellungen.
 - **⚡ High-Performance Caching**: Integration von **Redis** für ultraschnelles IP-Tracking und Rate-Limiting. Entlastet die Hauptdatenbank massiv.
 - **📡 FastAPI Backend**: Ein neues, entkoppeltes REST-API-Backend auf Port **8001** für schnellen Datenzugriff und externe Integrationen.
 - **📺 Live Monitor**: Echtzeit-Log-Streaming via Websockets und visuelle Darstellung von Angriffs-Strukturen als **Network Graph**.
@@ -19,6 +23,7 @@ Ein hochperformantes, KI-gestütztes Security-Ökosystem für den **Nginx Proxy 
 - **📈 Skalierbare Daten**: Zeitbasierte **PostgreSQL-Partitionierung** und automatisierte **CSV-Archivierung** für Millionen von Log-Einträgen.
 - **🔐 Hardened Auth**: Unterstützung für **Zwei-Faktor-Authentifizierung (MFA/TOTP)** über das Dashboard.
 - **🔔 Multi-Channel Alerting**: Jetzt inklusive **E-Mail (SMTP)** Unterstützung zusätzlich zu Telegram und Discord.
+
 
 ## 🛠️ Installation & Enterprise Update
 

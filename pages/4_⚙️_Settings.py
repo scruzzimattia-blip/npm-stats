@@ -233,7 +233,7 @@ def main():
 
     with tab_notify:
         st.subheader("Alerting Konfiguration")
-        
+
         # Test Alert Button
         col_t1, col_t2 = st.columns([3, 1])
         with col_t1:
@@ -355,6 +355,27 @@ def main():
         stats_col1.metric("Gesamt Einträge", db_info["total_rows"])
         stats_col2.metric("Aktive Sperren", db_info["blocked_count"])
         stats_col3.metric("DB Größe", db_info["table_size"])
+
+        st.divider()
+
+        st.subheader("📜 Audit-Log (Aktions-Historie)")
+        from src.database import get_audit_logs
+        audit_data = get_audit_logs(limit=50)
+        if audit_data:
+            st.dataframe(
+                audit_data,
+                column_config={
+                    "timestamp": st.column_config.DatetimeColumn("Zeitpunkt", format="DD.MM.YYYY HH:mm:ss"),
+                    "username": "Benutzer",
+                    "action": "Aktion",
+                    "target": "Ziel (IP/ASN)",
+                    "details": "Details"
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("Noch keine Einträge im Audit-Log vorhanden.")
 
         st.divider()
 

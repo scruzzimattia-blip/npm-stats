@@ -64,10 +64,10 @@ def send_test_notification() -> bool:
     test_ip = "1.2.3.4 (TEST)"
     test_reason = "Dies ist eine Test-Benachrichtigung vom NPM Traffic Monitor."
     test_until = datetime.now(timezone.utc) + __import__("datetime").timedelta(hours=1)
-    
+
     # We call send_notification directly, but temporarily bypass the notify_on_block check if needed
     # (actually we just want to see if the configuration works)
-    
+
     # Temporarily force notify_on_block to True for the test
     original_setting = app_config.notify_on_block
     app_config.notify_on_block = True

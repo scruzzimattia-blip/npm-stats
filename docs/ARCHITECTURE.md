@@ -17,6 +17,9 @@ graph TD
     AI[npm-ai Analyzer] -->|Analyze| DB
     AI -->|Fetch| OpenRouter[OpenRouter LLM]
     
+    Cron[npm-cron Maintenance] -->|Heal| Firewall[System Firewall]
+    Cron -->|Archive| Storage[Compressed CSV]
+    
     Prometheus[Prometheus] -->|Scrape| Worker
 ```
 
@@ -28,26 +31,30 @@ graph TD
 - **Benefits**: Decouples the presentation layer (UI) from the database, allowing for third-party integrations and better scalability.
 
 ### 2. Real-Time Processing Layer (`npm-worker`)
-- **Technology**: `watchdog` (Event-driven file monitoring).
-- **Responsibility**: Listens for file system changes in NPM logs. No more periodic polling.
+- **Technology**: `watchdog` (Event-driven file monitoring) with periodic fallback.
+- **Responsibility**: Listens for file system changes in NPM logs. Includes a safety fallback to ensure data synchronization even if OS events are missed.
 - **Metrics**: Exposes internal performance metrics on port 8000 for Prometheus.
 
-### 3. High-Speed Cache (`redis`)
+### 3. Maintenance & Integrity (`npm-cron`)
+- **Firewall Integrity Guard**: Periodically (every 10 min) verifies that the `NPM_MONITOR` iptables chain is present and correctly linked. Repairs links automatically if disrupted by other firewall tools (e.g., `ufw reload`).
+- **Audit Engine**: Records every administrative change (Unblocks, Whitelisting) in a dedicated `audit_log` table for compliance and revision security.
+
+### 4. High-Speed Cache (`redis`)
 - **Responsibility**: Stores ephemeral request counters, rate-limit buckets, and temporary IP tracking data.
 - **Impact**: Reduces database write IOPS by over 90%, as only permanent blocks and persistent traffic logs are written to PostgreSQL.
 
-### 4. Intelligence Layer (`npm-ai`)
+### 5. Intelligence Layer (`npm-ai`)
 - **Daily Briefings**: A new autonomous task that summarizes system state every 24 hours.
 - **Structured Analysis**: Uses LLM JSON-mode for precise threat classification (High/Medium/Low/Critical).
 
-### 5. Data Integrity & Scaling
+### 6. Data Integrity & Scaling
 - **Partitioning**: The `traffic` table is now partitioned by time (e.g., monthly). This allows for instant deletion of old data by dropping partitions instead of expensive `DELETE` queries.
 - **Archiving**: Logs older than the retention period are automatically exported to compressed CSV files (`archives/`) before removal.
 
 ## Security Model: Multi-Tier Defense
 
 1. **Deceptive Tier (Honeypots)**: Immediate 1-year ban for anyone touching high-value bait paths.
-2. **Heuristic Tier (WAF)**: Fast regex matching for SQLi, XSS, and known malicious User-Agents.
+2. **Heuristic Tier (WAF)**: Fast regex matching for SQLi, XSS, and modern exploits (Log4Shell, SpringShell).
 3. **Community Tier (CrowdSec)**: Reputation checks against millions of known bad actors.
 4. **Cognitive Tier (AI)**: Behavioral assessment of intention using deep log history.
 5. **Edge Tier (Cloudflare)**: Pushing bans to the edge to protect server resources.
