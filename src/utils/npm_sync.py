@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from sqlalchemy import create_engine, text
 from ..config import app_config
+from concurrent.futures import ThreadPoolExecutor
 from ..database import update_host_health
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,10 @@ def get_npm_engine():
 @st.cache_data(ttl=300)
 def fetch_npm_proxy_hosts() -> List[Dict[str, Any]]:
     """Fetch proxy hosts and their SSL status from NPM database."""
+    return _fetch_npm_proxy_hosts_core()
+
+def _fetch_npm_proxy_hosts_core() -> List[Dict[str, Any]]:
+    """Core logic to fetch hosts without Streamlit caching (internal use)."""
     if not app_config.npm_db_password and app_config.npm_db_type == "mysql":
         logger.debug("NPM MySQL password not set, skipping fetch.")
         return []
@@ -79,49 +84,72 @@ def get_ssl_expiry(hostname: str) -> Optional[datetime]:
     """Get SSL certificate expiry date for a hostname."""
     try:
         context = ssl.create_default_context()
-        with socket.create_connection((hostname, 443), timeout=5) as sock:
+        # Disable certificate validation for the check itself to avoid bootstrap issues
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        with socket.create_connection((hostname, 443), timeout=3) as sock:
+            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                cert = ssock.getpeercert(binary_form=True)
+                if not cert:
+                    # If we can't get binary form, try peer cert with validation disabled
+                    # Note: getpeercert() returns None if verify_mode is CERT_NONE
+                    # So we actually need a separate context for the expiry check
+                    pass
+        
+        # Second attempt for expiry info with verification
+        context = ssl.create_default_context()
+        with socket.create_connection((hostname, 443), timeout=3) as sock:
             with context.wrap_socket(sock, server_hostname=hostname) as ssock:
                 cert = ssock.getpeercert()
-                # 'Mar 12 12:00:00 2026 GMT'
                 expiry_str = cert['notAfter']
                 return datetime.strptime(expiry_str, '%b %d %H:%M:%S %Y %Z').replace(tzinfo=timezone.utc)
     except Exception:
         return None
 
 
+def check_single_host(h: Dict[str, Any]):
+    """Check a single NPM host's health."""
+    if not h["domains"]:
+        return
+    domain = h["domains"][0]
+
+    start_time = time.time()
+    is_up = False
+    status_code = 0
+    ssl_expiry = None
+
+    try:
+        # 1. HTTP/S Check (try https if ssl enabled, else http)
+        url = f"https://{domain}" if h["ssl"] else f"http://{domain}"
+        # We use verify=False to check if the server responds at all, even with invalid cert
+        response = requests.get(url, timeout=5, allow_redirects=True, verify=False)
+        status_code = response.status_code
+        is_up = True if status_code < 500 else False
+
+        # 2. SSL Check
+        if h["ssl"]:
+            ssl_expiry = get_ssl_expiry(domain)
+    except Exception as e:
+        logger.debug(f"Health check failed for {domain}: {e}")
+        is_up = False
+
+    response_time = round(time.time() - start_time, 3)
+    update_host_health(domain, is_up, status_code, ssl_expiry, response_time)
+
+
 def check_all_hosts_health():
-    """Iterate through all NPM hosts and check their uptime and SSL."""
-    hosts = fetch_npm_proxy_hosts()
+    """Iterate through all NPM hosts and check their uptime and SSL in parallel."""
+    logger.info("Starting parallel host health check...")
+    hosts = _fetch_npm_proxy_hosts_core()
     if not hosts:
+        logger.warning("No hosts found to check.")
         return
 
-    for h in hosts:
-        # Check primary domain
-        if not h["domains"]:
-            continue
-        domain = h["domains"][0]
+    # Use ThreadPoolExecutor for parallel checks (mostly I/O bound)
+    max_workers = min(10, len(hosts))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        executor.map(check_single_host, hosts)
+    
+    logger.info(f"Finished health check for {len(hosts)} hosts.")
 
-        start_time = time.time()
-        is_up = False
-        status_code = 0
-        ssl_expiry = None
-
-        try:
-            # 1. HTTP/S Check (try https if ssl enabled, else http)
-            url = f"https://{domain}" if h["ssl"] else f"http://{domain}"
-            response = requests.get(url, timeout=10, allow_redirects=True, verify=False)
-            status_code = response.status_code
-            is_up = True if status_code < 500 else False
-
-            # 2. SSL Check
-            if h["ssl"]:
-                ssl_expiry = get_ssl_expiry(domain)
-        except Exception as e:
-            logger.debug(f"Health check failed for {domain}: {e}")
-            is_up = False
-
-        response_time = round(time.time() - start_time, 3)
-
-        # Update DB
-        update_host_health(domain, is_up, status_code, ssl_expiry, response_time)
 
