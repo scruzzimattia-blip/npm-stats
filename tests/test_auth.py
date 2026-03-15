@@ -1,14 +1,14 @@
 """Tests for authentication module."""
 
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from ipaddress import ip_address, ip_network
 
 
 # Mock database at module level to prevent connection attempts
 @pytest.fixture(autouse=True)
 def mock_database():
-    with patch("src.database.get_connection") as mock_get_conn, patch("src.database.init_database") as mock_init:
+    with patch("src.database.get_connection") as mock_get_conn, patch("src.database.init_database"):
         # Create a proper mock connection with cursor context manager
         mock_conn = MagicMock()
         mock_cursor = MagicMock()

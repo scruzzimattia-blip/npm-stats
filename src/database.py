@@ -1,7 +1,5 @@
 """Database operations for NPM Monitor."""
 
-import functools
-import json
 import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -28,32 +26,6 @@ _redis_client: Optional[redis.Redis] = None
 
 # Query timeout in seconds
 QUERY_TIMEOUT = 30
-
-
-def cache_result(ttl_seconds: int = 30, key_prefix: str = "cache"):
-    """Cache function result in Redis."""
-
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            try:
-                redis_client = get_redis()
-                cache_key = f"{key_prefix}:{func.__name__}:{hash(str(args) + str(kwargs))}"
-
-                cached = redis_client.get(cache_key)
-                if cached:
-                    return json.loads(cached)
-
-                result = func(*args, **kwargs)
-                if result is not None:
-                    redis_client.setex(cache_key, ttl_seconds, json.dumps(result, default=str))
-                return result
-            except Exception:
-                return func(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
 
 
 def is_database_available() -> bool:

@@ -1,15 +1,13 @@
 """initial_schema
 
 Revision ID: 7e18e79cbb1c
-Revises: 
+Revises:
 Create Date: 2026-03-14 23:51:31.992549
 
 """
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
 revision: str = '7e18e79cbb1c'
@@ -39,7 +37,7 @@ def upgrade() -> None:
             longitude DOUBLE PRECISION
         );
     """)
-    
+
     op.execute("CREATE INDEX IF NOT EXISTS idx_traffic_time ON traffic (time DESC);")
     op.execute("CREATE INDEX IF NOT EXISTS idx_traffic_host ON traffic (host);")
     op.execute("CREATE INDEX IF NOT EXISTS idx_traffic_remote_addr ON traffic (remote_addr);")

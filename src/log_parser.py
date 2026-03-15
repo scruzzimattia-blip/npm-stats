@@ -239,40 +239,44 @@ def parse_log_line(line: str) -> Optional[Dict[str, Any]]:
 
 
 def read_log_file(file_path: str, limit: int) -> Iterator[str]:
-    """Read last N lines from a log file efficiently with optimized chunk size."""
+    """Read last N lines from a log file efficiently by reading in reverse chunks."""
     try:
         with open(file_path, "rb") as f:
-            # Seek to end
             f.seek(0, 2)
             file_size = f.tell()
-
             if file_size == 0:
                 return
 
-            # Read in chunks from the end (optimized chunk size)
-            lines = []
-            position = file_size
+            buffer = b""
+            lines_found = 0
+            pos = file_size
 
-            while len(lines) < limit and position > 0:
-                read_size = min(CHUNK_SIZE, position)
-                position -= read_size
-                f.seek(position)
-                chunk = f.read(read_size).decode("utf-8", errors="ignore")
+            while pos > 0 and lines_found < limit:
+                read_size = min(pos, CHUNK_SIZE)
+                pos -= read_size
+                f.seek(pos)
+                chunk = f.read(read_size)
 
-                # Handle partial lines
-                if position > 0:
-                    # Find first newline and discard partial line
-                    newline_pos = chunk.find("\n")
-                    if newline_pos != -1:
-                        chunk = chunk[newline_pos + 1 :]
+                # Combine with previous buffer (which is what we read after this chunk)
+                buffer = chunk + buffer
+                lines_found = buffer.count(b"\n")
 
-                chunk_lines = chunk.splitlines()
-                lines = chunk_lines + lines
+                # Optimization: if we have way more lines than needed, we can stop reading
+                if lines_found > limit + 1:
+                    break
 
-            # Return only the last 'limit' lines
-            for line in lines[-limit:]:
+            # Now we have a buffer that contains at least 'limit' lines (if they exist)
+            decoded_buffer = buffer.decode("utf-8", errors="ignore")
+            all_lines = decoded_buffer.splitlines()
+
+            # Return last 'limit' non-empty lines
+            count = 0
+            for line in reversed(all_lines):
                 if line.strip():
                     yield line
+                    count += 1
+                    if count >= limit:
+                        break
 
     except (FileNotFoundError, PermissionError) as e:
         logger.warning(f"Cannot read log file {file_path}: {e}")
