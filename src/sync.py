@@ -1,13 +1,13 @@
 """Shared log synchronization logic for NPM Monitor."""
 
 import logging
-from datetime import datetime, timedelta, timezone
+from collections import defaultdict
+from datetime import datetime
 from typing import Optional
 
 from .blocking import get_blocker
 from .config import app_config
 from .database import (
-    add_blocked_ip,
     cleanup_expired_blocks,
     get_newest_timestamp,
     init_database,
@@ -18,12 +18,10 @@ from .log_parser import parse_all_logs
 logger = logging.getLogger(__name__)
 
 
-from collections import defaultdict
-
 def sync_logs(since: Optional[datetime] = None) -> int:
     """Synchronize logs to database, only importing new entries."""
     init_database()
-    
+
     # Cleanup expired blocks once in a while
     try:
         cleanup_expired_blocks()
@@ -39,10 +37,22 @@ def sync_logs(since: Optional[datetime] = None) -> int:
     # Check for blocking if enabled
     if app_config.enable_blocking:
         blocker = get_blocker(use_firewall=app_config.use_firewall)
-        
+
         # Aggregate failures per IP in this batch to reduce DB calls
-        ip_stats = defaultdict(lambda: {"404": 0, "403": 0, "5xx": 0, "suspicious": 0, "failed": 0, "last_path": "", "last_host": "", "last_ua": "", "country_code": ""})
-        
+        ip_stats = defaultdict(
+            lambda: {
+                "404": 0,
+                "403": 0,
+                "5xx": 0,
+                "suspicious": 0,
+                "failed": 0,
+                "last_path": "",
+                "last_host": "",
+                "last_ua": "",
+                "country_code": "",
+            }
+        )
+
         for row in rows:
             ip = row[5] if len(row) > 5 else None
             status = row[4] if len(row) > 4 else None
@@ -57,7 +67,7 @@ def sync_logs(since: Optional[datetime] = None) -> int:
                 is_403 = 1 if status == 403 else 0
                 is_5xx = 1 if 500 <= status <= 599 else 0
                 is_failed = 1 if (is_404 or is_403 or is_5xx or is_suspicious) else 0
-                
+
                 s = ip_stats[ip]
                 s["404"] += is_404
                 s["403"] += is_403
@@ -76,17 +86,12 @@ def sync_logs(since: Optional[datetime] = None) -> int:
             # If IP is already locally cached as blocked, skip
             if blocker.is_blocked(ip):
                 continue
-                
+
             try:
                 # In this optimized version, we could have a batch-update for counters,
                 # but for now we just call it once with the aggregated counts.
                 reason = blocker.check_request(
-                    ip, 
-                    0, 
-                    stats["last_path"], 
-                    stats["last_host"], 
-                    stats["last_ua"], 
-                    stats["country_code"]
+                    ip, 0, stats["last_path"], stats["last_host"], stats["last_ua"], stats["country_code"]
                 )
                 if reason:
                     blocked_count += 1

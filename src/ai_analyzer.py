@@ -6,16 +6,15 @@ import os
 import signal
 import sys
 import time
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, Optional
 
 import requests
 
 # Add parent directory to path
-sys.path.insert(0, str(os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))))
+sys.path.insert(0, str(os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))))
 
 from src.config import app_config
-from src.database import get_connection, add_ai_report, get_ai_reports
+from src.database import add_ai_report, get_connection
 from src.utils import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -23,11 +22,13 @@ logger = logging.getLogger(__name__)
 # Graceful shutdown flag
 shutdown_requested = False
 
+
 def handle_signal(signum: int, frame) -> None:
     """Handle shutdown signals gracefully."""
     global shutdown_requested
     logger.info(f"Received signal {signum}, shutting down...")
     shutdown_requested = True
+
 
 class AIAnalyzer:
     """Analyze suspicious IP behavior using LLMs via OpenRouter."""
@@ -61,33 +62,41 @@ class AIAnalyzer:
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
                     "HTTP-Referer": "https://github.com/mattia/npm-monitor",
-                    "X-Title": "NPM Monitor"
+                    "X-Title": "NPM Monitor",
                 },
                 json={
                     "model": self.model,
                     "messages": [
-                        {"role": "system", "content": "Du bist ein Senior SOC Analyst. Antworte ausschließlich in validem JSON."},
-                        {"role": "user", "content": prompt}
+                        {
+                            "role": "system",
+                            "content": "Du bist ein Senior SOC Analyst. Antworte ausschließlich in validem JSON.",
+                        },
+                        {"role": "user", "content": prompt},
                     ],
-                    "response_format": { "type": "json_object" }
+                    "response_format": {"type": "json_object"},
                 },
-                timeout=30
+                timeout=30,
             )
             response.raise_for_status()
             data = response.json()
             raw_content = data["choices"][0]["message"]["content"]
-            
+
             # Parse JSON response
             try:
                 # Remove possible markdown code blocks if the LLM adds them despite the system prompt
                 clean_json = raw_content.replace("```json", "").replace("```", "").strip()
                 res = json.loads(clean_json)
-                
+
                 content = res.get("markdown_report", raw_content)
                 threat_level = res.get("bedrohungslevel", "Unknown")
                 category = res.get("kategorie", "Unknown")
-                
-                full_report = f"### KI Analyse: {category}\n\n**Beurteilung:** {res.get('beurteilung')}\n**Begründung:** {res.get('begruendung')}\n\n{content}"
+
+                full_report = (
+                    f"### KI Analyse: {category}\n\n"
+                    f"**Beurteilung:** {res.get('beurteilung')}\n"
+                    f"**Begründung:** {res.get('begruendung')}\n\n"
+                    f"{content}"
+                )
             except json.JSONDecodeError:
                 logger.error(f"Failed to parse AI JSON response for {ip_address}. Falling back to raw text.")
                 full_report = raw_content
@@ -112,11 +121,12 @@ class AIAnalyzer:
             LIMIT 100;
         """
         import psycopg.rows as psycopg_rows
+
         with get_connection() as conn:
             with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
                 cur.execute(query, (ip_address,))
                 logs = cur.fetchall()
-                
+
         # Get blocking reason if available
         reason = "Unbekannt"
         try:
@@ -124,7 +134,8 @@ class AIAnalyzer:
                 with conn.cursor() as cur:
                     cur.execute("SELECT reason FROM blocklist WHERE ip_address = %s LIMIT 1", (ip_address,))
                     row = cur.fetchone()
-                    if row: reason = row[0]
+                    if row:
+                        reason = row[0]
         except Exception:
             pass
 
@@ -135,14 +146,18 @@ class AIAnalyzer:
         log_lines = []
         country = "Unbekannt"
         for log in context["logs"]:
-            if log.get("country_code"): country = f"{log['country_code']} ({log.get('city', 'Unbekannt')})"
-            line = f"[{log['time']}] {log['method']} {log['host']}{log['path']} -> {log['status']} (UA: {log['user_agent']})"
+            if log.get("country_code"):
+                country = f"{log['country_code']} ({log.get('city', 'Unbekannt')})"
+            line = (
+                f"[{log['time']}] {log['method']} {log['host']}{log['path']}"
+                f" -> {log['status']} (UA: {log['user_agent']})"
+            )
             log_lines.append(line)
-            
+
         logs_str = "\n".join(log_lines)
-        
+
         return f"""Du bist ein Senior SOC Analyst. Analysiere das Verhalten der IP {ip_address} aus {country}.
-Die IP wurde gesperrt mit dem Grund: "{context.get('block_reason', 'Unbekannt')}".
+Die IP wurde gesperrt mit dem Grund: "{context.get("block_reason", "Unbekannt")}".
 
 Deine Aufgabe ist es, die Absicht des Akteurs zu bestimmen. Suche nach:
 1. Directory/File Bruteforce (viele 404s auf sensitive Pfade)
@@ -165,19 +180,20 @@ ANTWORTE STRENG IM FOLGENDEN JSON-FORMAT (NUR DAS JSON!):
 }}
 """
 
+
 def run_ai_loop() -> None:
     """Periodically check for newly blocked IPs that haven't been analyzed yet."""
     setup_logging()
     logger.info("Starting AI-Analyzer background loop...")
-    
+
     # Register signal handlers
     signal.signal(signal.SIGTERM, handle_signal)
     signal.signal(signal.SIGINT, handle_signal)
-    
+
     while not shutdown_requested:
         # Load latest settings from DB (including API keys)
         app_config.load_dynamic_settings()
-        
+
         if app_config.enable_ai_auto_analysis and app_config.openrouter_api_key:
             analyzer = AIAnalyzer()
             try:
@@ -193,19 +209,21 @@ def run_ai_loop() -> None:
                     with conn.cursor() as cur:
                         cur.execute(query)
                         ips_to_analyze = [row[0] for row in cur.fetchall()]
-                
+
                 for ip in ips_to_analyze:
-                    if shutdown_requested: break
+                    if shutdown_requested:
+                        break
                     analyzer.analyze_ip(ip)
-                    time.sleep(2) # rate limiting
-                    
+                    time.sleep(2)  # rate limiting
+
             except Exception as e:
                 logger.error(f"Error in AI loop: {e}")
         elif not app_config.openrouter_api_key:
             logger.debug("AI analysis active but OPENROUTER_API_KEY is missing. Waiting...")
-        
+
         # Wait for next check
         time.sleep(30)
+
 
 if __name__ == "__main__":
     run_ai_loop()

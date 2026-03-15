@@ -1,8 +1,9 @@
 import logging
+
 import requests
-from datetime import datetime, timedelta, timezone
+
 from src.config import app_config
-from src.database import get_connection, add_ai_report
+from src.database import add_ai_report, get_connection
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class DailyBriefingGenerator:
 
         # 1. Gather 24h context
         context = self._get_24h_summary()
-        
+
         # 2. Build Prompt
         prompt = f"""Analysiere den Traffic der letzten 24 Stunden meines Nginx Proxy Managers.
 Identifiziere Trends, auffällige Anomalien und schlage proaktiv neue Sicherheitsregeln vor.
@@ -59,7 +60,7 @@ Gliedere ihn in:
             )
             response.raise_for_status()
             briefing = response.json()["choices"][0]["message"]["content"]
-            
+
             # Save as a special AI report for "SYSTEM"
             add_ai_report("SYSTEM_BRIEFING", briefing, "Information", self.model)
             return briefing
@@ -88,5 +89,5 @@ Gliedere ihn in:
                         summary.append(f"- {r['host']}{r['path']} (Status {r['status']}): {r['count']} mal")
         except Exception as e:
             summary.append(f"Fehler beim Laden der Daten: {e}")
-            
+
         return "\n".join(summary)

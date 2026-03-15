@@ -1,8 +1,10 @@
 """CrowdSec integration for IP reputation checks."""
 
 import logging
+from typing import Any, Dict, Optional
+
 import requests
-from typing import Optional, List, Dict, Any
+
 from .config import app_config
 
 logger = logging.getLogger(__name__)
@@ -21,7 +23,7 @@ class CrowdSecManager:
     def get_ip_reputation(self, ip: str) -> Optional[Dict[str, Any]]:
         """
         Check if an IP has any active decisions in CrowdSec.
-        
+
         Returns:
             Dictionary with decision details or None if no decision found.
         """
@@ -30,14 +32,14 @@ class CrowdSecManager:
 
         url = f"{self.api_url}/v1/decisions"
         params = {"ip": ip}
-        
+
         try:
             response = requests.get(
                 url, headers=self.headers, params=params, timeout=5
             )
             response.raise_for_status()
             decisions = response.json()
-            
+
             if decisions and isinstance(decisions, list):
                 # Return the most relevant decision (usually there's only one active)
                 return decisions[0]

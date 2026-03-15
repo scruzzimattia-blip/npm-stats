@@ -1,35 +1,36 @@
+from datetime import datetime, timezone
+
 import streamlit as st
-import pandas as pd
-from datetime import datetime, time as dt_time, timezone
 from streamlit_autorefresh import st_autorefresh
+
+from src.components import (
+    render_charts,
+    render_error_paths,
+    render_metrics,
+    render_npm_hosts_status,
+    render_request_log,
+    render_top_ips,
+)
+from src.config import app_config
+from src.database import get_latest_logs, get_traffic_spike_metrics
 from src.ui_utils import (
-    init_page, 
-    handle_sync_button, 
-    render_common_sidebar, 
-    load_traffic_data, 
-    _cached_hourly_summary, 
+    _cached_hourly_summary,
     _cached_top_ips,
     _cached_traffic_metrics,
-    sync_logs
+    handle_sync_button,
+    init_page,
+    load_traffic_data,
+    render_common_sidebar,
 )
-from src.components import (
-    render_metrics,
-    render_charts,
-    render_top_ips,
-    render_error_paths,
-    render_request_log,
-    render_npm_hosts_status
-)
-from src.database import get_traffic_count, get_latest_logs, get_traffic_spike_metrics
 from src.utils.reports import generate_pdf_report
-from src.config import app_config
+
 
 def main():
     init_page("Dashboard", "📊")
     st.title("📊 Traffic Übersicht")
-    
+
     handle_sync_button()
-    
+
     selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query, selected_status = render_common_sidebar()
 
     if not selected_hosts:
@@ -48,7 +49,7 @@ def main():
 
     # Load data
     metrics = _cached_traffic_metrics(hosts=selected_hosts, start_date=start_date, end_date=end_date)
-    
+
     if metrics["total_requests"] == 0:
         st.info("Keine Daten für den gewählten Zeitraum gefunden. Klicke oben rechts auf 🔄 Sync, um aktuelle Logs einzulesen.")
     df = load_traffic_data(
@@ -73,37 +74,37 @@ def main():
 
     render_metrics(metrics)
     st.divider()
-    
+
     hourly_summary = _cached_hourly_summary(hosts=selected_hosts, start_date=start_date, end_date=end_date)
     top_ips_summary = _cached_top_ips(hosts=selected_hosts, start_date=start_date, end_date=end_date)
 
     tab1, tab2, tab3 = st.tabs(["📊 Übersicht", "🔴 Live Logs", "🔄 NPM Hosts"])
-    
+
     with tab1:
         render_charts(df, hourly_summary)
         render_top_ips(df, top_ips_summary)
         render_error_paths(df)
         render_request_log(df)
-        
+
     with tab2:
         col_l1, col_l2 = st.columns([1, 4])
         with col_l1:
             auto_refresh_live = st.toggle("Auto-Refresh (5s)", value=False, key="live_log_toggle")
-            
+
         if auto_refresh_live:
             st_autorefresh(interval=5000, limit=None, key="live_log_refresh")
-            
+
         live_df = get_latest_logs(limit=20)
         if not live_df.empty:
             display_df = live_df.copy()
             if "time" in display_df.columns:
                 display_df["time"] = display_df["time"].dt.strftime("%Y-%m-%d %H:%M:%S")
-            
+
             # Select columns to show
             cols_to_show = ["time", "host", "method", "path", "status", "remote_addr"]
             if "country_code" in display_df.columns:
                 cols_to_show.append("country_code")
-                
+
             st.dataframe(
                 display_df[cols_to_show],
                 use_container_width=True,

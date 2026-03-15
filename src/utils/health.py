@@ -1,10 +1,11 @@
 """Health check utility for Nginx Proxy Manager."""
 
-import socket
 import logging
 import os
-import streamlit as st
+import socket
 from typing import Dict
+
+import streamlit as st
 
 logger = logging.getLogger(__name__)
 
@@ -20,13 +21,13 @@ def check_npm_status(host: str = None, ports: tuple = (80, 81, 443)) -> Dict[int
     Args:
         host: The hostname or IP to check.
         ports: Tuple of ports to check.
-        
+
     Returns:
         Dictionary mapping port to a boolean indicating if it's open.
     """
     if host is None:
         host = get_npm_host()
-        
+
     status = {}
     for port in ports:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -40,9 +41,9 @@ def check_npm_status(host: str = None, ports: tuple = (80, 81, 443)) -> Dict[int
             status[port] = False
         finally:
             sock.close()
-            
+
     # Fallback to localhost if host.docker.internal fails completely and it was the default
     if host == "host.docker.internal" and not any(status.values()):
         return check_npm_status("localhost", ports)
-            
+
     return status

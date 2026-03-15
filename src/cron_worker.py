@@ -43,7 +43,7 @@ def run_cron_worker() -> None:
 
     while not shutdown_requested:
         now = time.time()
-        
+
         # 1. Host health and SSL checks
         if now - last_health_check >= health_check_interval:
             logger.info("Cron: Starting host health and SSL check...")

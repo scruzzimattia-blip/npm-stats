@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Optional
 
 import pandas as pd
@@ -93,8 +94,6 @@ def _get_device_type(ua_lower: str) -> str:
     return "Desktop"
 
 
-from functools import lru_cache
-
 @lru_cache(maxsize=10000)
 def parse_user_agent(ua: str) -> dict[str, str | bool]:
     """Parse user agent string into components with categorization."""
@@ -107,7 +106,7 @@ def parse_user_agent(ua: str) -> dict[str, str | bool]:
     # Categories
     is_bot = False
     bot_category = "Mensch"
-    
+
     # Scanner detection
     scanners = {
         "shodan": "Security Scanner (Shodan)",
@@ -121,13 +120,13 @@ def parse_user_agent(ua: str) -> dict[str, str | bool]:
         "acunetix": "Security Scanner (Acunetix)",
         "sqlmap": "Security Scanner (sqlmap)",
     }
-    
+
     for key, label in scanners.items():
         if key in ua_lower:
             is_bot = True
             bot_category = label
             break
-            
+
     if not is_bot:
         # Search engines
         search_engines = {
@@ -143,7 +142,7 @@ def parse_user_agent(ua: str) -> dict[str, str | bool]:
                 is_bot = True
                 bot_category = label
                 break
-                
+
     if not is_bot:
         # Social Media & Tools
         social_bots = {
@@ -171,13 +170,7 @@ def parse_user_agent(ua: str) -> dict[str, str | bool]:
             is_bot = True
             bot_category = "Generischer Bot"
 
-    return {
-        "browser": browser, 
-        "os": os_name, 
-        "device": device, 
-        "is_bot": is_bot,
-        "bot_category": bot_category
-    }
+    return {"browser": browser, "os": os_name, "device": device, "is_bot": is_bot, "bot_category": bot_category}
 
 
 def get_status_category(status: int) -> str:

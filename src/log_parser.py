@@ -7,8 +7,9 @@ import os
 import re
 import time
 from collections import OrderedDict
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from functools import lru_cache
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from .config import CLOUDFLARE_NETWORKS, PRIVATE_NETWORKS, app_config, get_ignored_ips
@@ -164,12 +165,11 @@ def should_ignore_ip(ip_str: str) -> bool:
     return False
 
 
-from functools import lru_cache
-
 # Fast cache for datetime parsing since many logs happen in the same second
 @lru_cache(maxsize=1024)
 def parse_nginx_timestamp(time_str: str) -> datetime:
     return datetime.strptime(time_str, "%d/%b/%Y:%H:%M:%S %z")
+
 
 def parse_log_line(line: str) -> Optional[Dict[str, Any]]:
     """Parse a single log line and return extracted data."""
@@ -343,7 +343,7 @@ def parse_all_logs(limit_per_file: Optional[int] = None, since: Optional[datetim
     # Use ThreadPoolExecutor for I/O bound operations (file reading)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(parse_single_log_file, fp, limit, since): fp for fp in log_files}
-        
+
         # Process results as they complete
         for future in as_completed(futures):
             try:

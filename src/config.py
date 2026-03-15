@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import List
 from urllib.parse import quote_plus
+
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -43,21 +44,27 @@ class AppConfig:
     max_display_rows: int = field(default_factory=lambda: int(os.getenv("MAX_DISPLAY_ROWS", "50000")))
     retention_days: int = field(default_factory=lambda: int(os.getenv("RETENTION_DAYS", "30")))
     enable_geoip: bool = field(default_factory=lambda: os.getenv("ENABLE_GEOIP", "false").lower() == "true")
-    geoip_db_path: str = field(default_factory=lambda: os.getenv("GEOIP_DB_PATH", "/usr/share/GeoIP/GeoLite2-City.mmdb"))
+    geoip_db_path: str = field(
+        default_factory=lambda: os.getenv("GEOIP_DB_PATH", "/usr/share/GeoIP/GeoLite2-City.mmdb")
+    )
     enable_auth: bool = field(default_factory=lambda: os.getenv("ENABLE_AUTH", "false").lower() == "true")
     auth_username: str = field(default_factory=lambda: os.getenv("AUTH_USERNAME", "admin"))
     auth_password: str = field(default_factory=lambda: os.getenv("AUTH_PASSWORD", ""))
-    allowed_networks: List[str] = field(default_factory=lambda: os.getenv("ALLOWED_NETWORKS", "127.0.0.1/32").split(","))
+    allowed_networks: List[str] = field(
+        default_factory=lambda: os.getenv("ALLOWED_NETWORKS", "127.0.0.1/32").split(",")
+    )
     # Database and Caching
     redis_url: str = field(default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6379/0"))
-    
+
     # Blocking configuration
     enable_blocking: bool = field(default_factory=lambda: os.getenv("ENABLE_BLOCKING", "true").lower() == "true")
     block_duration: int = field(default_factory=lambda: int(os.getenv("BLOCK_DURATION", "3600")))  # 1 hour
     max_404_errors: int = field(default_factory=lambda: int(os.getenv("MAX_404_ERRORS", "20")))  # per 5 minutes
     max_403_errors: int = field(default_factory=lambda: int(os.getenv("MAX_403_ERRORS", "10")))  # per 5 minutes
     max_5xx_errors: int = field(default_factory=lambda: int(os.getenv("MAX_5XX_ERRORS", "50")))  # per 5 minutes
-    max_failed_requests: int = field(default_factory=lambda: int(os.getenv("MAX_FAILED_REQUESTS", "100")))  # per 5 minutes
+    max_failed_requests: int = field(
+        default_factory=lambda: int(os.getenv("MAX_FAILED_REQUESTS", "100"))
+    )  # per 5 minutes
     max_requests_per_minute: int = field(default_factory=lambda: int(os.getenv("MAX_REQUESTS_PER_MINUTE", "60")))
     suspicious_paths: List[str] = field(
         default_factory=lambda: [
@@ -91,15 +98,25 @@ class AppConfig:
         ]
     )
     use_firewall: bool = field(default_factory=lambda: os.getenv("USE_FIREWALL", "false").lower() == "true")
-    honey_pot_duration: int = field(default_factory=lambda: int(os.getenv("HONEY_POT_DURATION", "31536000")))  # Default: 1 year in seconds
-    blocked_countries: List[str] = field(default_factory=lambda: [c.strip().upper() for c in os.getenv("BLOCKED_COUNTRIES", "").split(",") if c.strip()])
-    allow_only_countries: List[str] = field(default_factory=lambda: [c.strip().upper() for c in os.getenv("ALLOW_ONLY_COUNTRIES", "").split(",") if c.strip()])
+    honey_pot_duration: int = field(
+        default_factory=lambda: int(os.getenv("HONEY_POT_DURATION", "31536000"))
+    )  # Default: 1 year in seconds
+    blocked_countries: List[str] = field(
+        default_factory=lambda: [c.strip().upper() for c in os.getenv("BLOCKED_COUNTRIES", "").split(",") if c.strip()]
+    )
+    allow_only_countries: List[str] = field(
+        default_factory=lambda: [
+            c.strip().upper() for c in os.getenv("ALLOW_ONLY_COUNTRIES", "").split(",") if c.strip()
+        ]
+    )
     # Cloudflare settings
     enable_cloudflare: bool = field(default_factory=lambda: os.getenv("ENABLE_CLOUDFLARE", "false").lower() == "true")
     cloudflare_api_token: str = field(default_factory=lambda: os.getenv("CLOUDFLARE_API_TOKEN", ""))
     cloudflare_zone_id: str = field(default_factory=lambda: os.getenv("CLOUDFLARE_ZONE_ID", ""))
     # Anomaly detection
-    enable_anomaly_detection: bool = field(default_factory=lambda: os.getenv("ENABLE_ANOMALY_DETECTION", "true").lower() == "true")
+    enable_anomaly_detection: bool = field(
+        default_factory=lambda: os.getenv("ENABLE_ANOMALY_DETECTION", "true").lower() == "true"
+    )
     spike_threshold_factor: float = field(default_factory=lambda: float(os.getenv("SPIKE_THRESHOLD_FACTOR", "3.0")))
     spike_min_requests: int = field(default_factory=lambda: int(os.getenv("SPIKE_MIN_REQUESTS", "50")))
     # CrowdSec settings
@@ -125,7 +142,9 @@ class AppConfig:
     # AI settings
     openrouter_api_key: str = field(default_factory=lambda: os.getenv("OPENROUTER_API_KEY", ""))
     ai_model: str = field(default_factory=lambda: os.getenv("AI_MODEL", "google/gemini-2.0-flash-lite:free"))
-    enable_ai_auto_analysis: bool = field(default_factory=lambda: os.getenv("ENABLE_AI_AUTO_ANALYSIS", "false").lower() == "true")
+    enable_ai_auto_analysis: bool = field(
+        default_factory=lambda: os.getenv("ENABLE_AI_AUTO_ANALYSIS", "false").lower() == "true"
+    )
     # NPM Database settings (for auto-discovery)
     npm_db_type: str = field(default_factory=lambda: os.getenv("NPM_DB_TYPE", "mysql"))  # mysql or sqlite
     npm_db_host: str = field(default_factory=lambda: os.getenv("NPM_DB_HOST", "localhost"))
@@ -139,23 +158,25 @@ class AppConfig:
     def load_dynamic_settings(self, force: bool = False):
         """Load settings from database to override environment variables (cached for 60s)."""
         import time
+
         now = time.time()
         if not force and now - self._last_load_time < 60:
             return
 
         try:
             from .database import get_all_settings
+
             db_settings = get_all_settings()
-            
+
             # Map DB keys to attribute names
             for key, value in db_settings.items():
                 if hasattr(self, key):
                     attr_type = type(getattr(self, key))
-                    if attr_type == bool:
+                    if attr_type is bool:
                         setattr(self, key, value.lower() == "true")
-                    elif attr_type == int:
+                    elif attr_type is int:
                         setattr(self, key, int(value))
-                    elif attr_type == list:
+                    elif attr_type is list:
                         setattr(self, key, [p.strip() for p in value.split(",") if p.strip()])
                     else:
                         setattr(self, key, value)
@@ -227,7 +248,7 @@ app_config = AppConfig()
 def validate_config() -> list[str]:
     """Validate configuration and return list of errors."""
     errors = []
-    
+
     # Database validation
     if not db_config.password:
         errors.append("DB_PASSWORD is required but not set")
@@ -235,14 +256,14 @@ def validate_config() -> list[str]:
         errors.append("DB_HOST is required but not set")
     if db_config.port < 1 or db_config.port > 65535:
         errors.append(f"DB_PORT must be between 1 and 65535, got {db_config.port}")
-    
+
     # Auth validation
     if app_config.enable_auth:
         if not app_config.auth_password:
             errors.append("AUTH_PASSWORD is required when ENABLE_AUTH is true")
         if len(app_config.auth_password) < 8:
             errors.append("AUTH_PASSWORD should be at least 8 characters")
-    
+
     # Network validation
     for network in app_config.allowed_networks:
         network = network.strip()
@@ -251,20 +272,20 @@ def validate_config() -> list[str]:
                 ipaddress.ip_network(network)
             except ValueError:
                 errors.append(f"Invalid network in ALLOWED_NETWORKS: {network}")
-    
+
     # Numeric validation
     if app_config.retention_days < 1:
         errors.append(f"RETENTION_DAYS must be at least 1, got {app_config.retention_days}")
     if app_config.block_duration < 60:
         errors.append(f"BLOCK_DURATION should be at least 60 seconds, got {app_config.block_duration}")
-    
+
     # Cloudflare validation
     if app_config.enable_cloudflare:
         if not app_config.cloudflare_api_token:
             errors.append("CLOUDFLARE_API_TOKEN ist erforderlich, wenn Cloudflare aktiviert ist")
         if not app_config.cloudflare_zone_id:
             errors.append("CLOUDFLARE_ZONE_ID ist erforderlich, wenn Cloudflare aktiviert ist")
-    
+
     return errors
 
 

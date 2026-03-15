@@ -1,7 +1,7 @@
 """Blocked IPs dashboard component."""
 
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import streamlit as st
@@ -9,18 +9,16 @@ import streamlit as st
 from ..blocking import get_blocker
 from ..config import app_config
 from ..database import (
-    get_blocked_ips, 
-    remove_blocked_ip, 
-    add_blocked_ip, 
-    get_whitelist, 
-    add_to_whitelist, 
-    remove_from_whitelist,
-    get_blocklist_with_ai_status,
-    get_asn_blocklist,
     add_asn_block,
-    remove_asn_block
+    add_blocked_ip,
+    add_to_whitelist,
+    get_asn_blocklist,
+    get_blocklist_with_ai_status,
+    get_whitelist,
+    remove_asn_block,
+    remove_blocked_ip,
+    remove_from_whitelist,
 )
-from ..utils import format_number
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +38,10 @@ def render_blocked_ips():
     st.subheader("🚫 Aktive Sperrliste")
 
     blocker = get_blocker()
-    
+
     # 1. Action Buttons & Quick Controls
     col_actions1, col_actions2 = st.columns([2, 1])
-    
+
     with col_actions1:
         with st.expander("➕ IP manuell sperren"):
             with st.form("manual_block_form", clear_on_submit=True):
@@ -52,13 +50,13 @@ def render_blocked_ips():
                     manual_ip = st.text_input("IP Adresse", placeholder="z.B. 1.2.3.4")
                 with c2:
                     manual_reason = st.text_input("Grund", value="Manuelle Sperre")
-                
+
                 c3, c4 = st.columns(2)
                 with c3:
                     manual_duration = st.number_input("Dauer", min_value=1, value=60, help="In Minuten")
                 with c4:
                     duration_unit = st.selectbox("Einheit", ["Minuten", "Stunden", "Tage"])
-                
+
                 if st.form_submit_button("Sperre anlegen", type="primary", use_container_width=True):
                     if manual_ip:
                         mult = {"Minuten": 1, "Stunden": 60, "Tage": 1440}
@@ -69,8 +67,14 @@ def render_blocked_ips():
                         st.rerun()
 
     with col_actions2:
-        if st.button("🗑️ Alle Sperren aufheben", type="secondary", use_container_width=True, help="Entfernt ALLE aktiven Sperren aus der Datenbank und Firewall"):
+        if st.button(
+            "🗑️ Alle Sperren aufheben",
+            type="secondary",
+            use_container_width=True,
+            help="Entfernt ALLE aktiven Sperren aus der Datenbank und Firewall",
+        ):
             from ..database import get_connection
+
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("UPDATE blocklist SET unblocked_at = NOW() WHERE unblocked_at IS NULL")
@@ -81,19 +85,19 @@ def render_blocked_ips():
     # 2. Rich Statistics
     rich_blocklist = _get_cached_blocklist_rich()
     stats = blocker.get_stats()
-    
+
     col_s1, col_s2, col_s3, col_s4 = st.columns(4)
     col_s1.metric("Aktive Sperren", len(rich_blocklist))
     col_s2.metric("Whitelist", stats["whitelisted"])
-    
+
     # Calculate most common reason
     if rich_blocklist:
-        reasons = [r['reason'] for r in rich_blocklist]
+        reasons = [r["reason"] for r in rich_blocklist]
         top_reason = max(set(reasons), key=reasons.count)
-        col_s3.metric("Top Grund", top_reason.split('(')[0].strip()[:15])
+        col_s3.metric("Top Grund", top_reason.split("(")[0].strip()[:15])
     else:
         col_s3.metric("Top Grund", "-")
-        
+
     col_s4.metric("Überwachte IPs", stats["tracked_ips"])
 
     st.divider()
@@ -108,10 +112,14 @@ def render_blocked_ips():
     # Apply filters
     filtered_list = rich_blocklist
     if search_term:
-        filtered_list = [r for r in filtered_list if search_term.lower() in r['ip_address'].lower() or search_term.lower() in r['reason'].lower()]
+        filtered_list = [
+            r
+            for r in filtered_list
+            if search_term.lower() in r["ip_address"].lower() or search_term.lower() in r["reason"].lower()
+        ]
     if filter_type != "Alle":
-        is_manual_filter = (filter_type == "Manuell")
-        filtered_list = [r for r in filtered_list if r['is_manual'] == is_manual_filter]
+        is_manual_filter = filter_type == "Manuell"
+        filtered_list = [r for r in filtered_list if r["is_manual"] == is_manual_filter]
 
     if not filtered_list:
         st.info("Keine Sperren gefunden, die den Kriterien entsprechen.")
@@ -119,29 +127,29 @@ def render_blocked_ips():
         # Create Display DataFrame
         display_data = []
         for r in filtered_list:
-            display_data.append({
-                "IP Adresse": r['ip_address'],
-                "Grund": r['reason'],
-                "Gesperrt seit": r['blocked_at'].strftime("%Y-%m-%d %H:%M"),
-                "Bis": r['block_until'].strftime("%Y-%m-%d %H:%M"),
-                "Typ": "👤 Manuell" if r['is_manual'] else "🤖 Auto",
-                "KI": "🧠 Ja" if r['ai_report_count'] > 0 else "➖"
-            })
-        
+            display_data.append(
+                {
+                    "IP Adresse": r["ip_address"],
+                    "Grund": r["reason"],
+                    "Gesperrt seit": r["blocked_at"].strftime("%Y-%m-%d %H:%M"),
+                    "Bis": r["block_until"].strftime("%Y-%m-%d %H:%M"),
+                    "Typ": "👤 Manuell" if r["is_manual"] else "🤖 Auto",
+                    "KI": "🧠 Ja" if r["ai_report_count"] > 0 else "➖",
+                }
+            )
+
         df = pd.DataFrame(display_data)
         st.dataframe(df, use_container_width=True, hide_index=True)
 
         # 4. Multi-Select Actions
         st.write(f"**Aktionen für {len(filtered_list)} Einträge:**")
         col_m1, col_s_btn = st.columns([3, 1])
-        
+
         with col_m1:
             selected_to_unblock = st.multiselect(
-                "IPs zum Entsperren auswählen",
-                options=[r['ip_address'] for r in filtered_list],
-                max_selections=50
+                "IPs zum Entsperren auswählen", options=[r["ip_address"] for r in filtered_list], max_selections=50
             )
-        
+
         with col_s_btn:
             if st.button("🔓 Entsperren", type="primary", use_container_width=True):
                 if selected_to_unblock:
@@ -153,18 +161,18 @@ def render_blocked_ips():
                     st.rerun()
 
         # 5. Export
-        csv = df.to_csv(index=False).encode('utf-8')
+        csv = df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="📥 Sperrliste als CSV exportieren",
             data=csv,
             file_name=f"blocklist_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime='text/csv',
+            mime="text/csv",
         )
 
     # 6. Whitelist Section (Enhanced)
     st.divider()
     st.subheader("⚪ Whitelist (Ausnahmen)")
-    
+
     w_col1, w_col2 = st.columns([1, 2])
     with w_col1:
         with st.form("add_whitelist_form", clear_on_submit=True):
@@ -176,7 +184,7 @@ def render_blocked_ips():
                     add_to_whitelist(w_ip, w_reason)
                     st.success("Hinzugefügt.")
                     st.rerun()
-    
+
     with w_col2:
         try:
             whitelist = get_whitelist()
@@ -185,9 +193,9 @@ def render_blocked_ips():
                 # handle different column names if necessary
                 if "ip_address" in w_df.columns:
                     w_df.columns = ["IP Adresse", "Notiz", "Hinzugefügt"]
-                
+
                 st.dataframe(w_df, use_container_width=True, hide_index=True)
-                
+
                 ips_to_remove = st.multiselect("Von Whitelist entfernen", options=w_df["IP Adresse"].tolist())
                 if st.button("Entfernen", disabled=not ips_to_remove):
                     for ip in ips_to_remove:
@@ -204,7 +212,7 @@ def render_asn_blocking():
     st.divider()
     st.subheader("🏢 Netzwerk-Sperren (ASN)")
     st.info("Sperrt ganze Rechenzentren oder Provider-Netzwerke.")
-    
+
     col1, col2 = st.columns([1, 2])
     with col1:
         with st.form("add_asn_form", clear_on_submit=True):
@@ -212,7 +220,7 @@ def render_asn_blocking():
             asn_val = st.text_input("ASN Nummer", placeholder="z.B. 24940")
             asn_desc = st.text_input("Beschreibung", placeholder="z.B. Hetzner Online GmbH")
             asn_reason = st.text_input("Grund", value="Data-Center Blocking")
-            
+
             if st.form_submit_button("Netzwerk sperren", use_container_width=True):
                 if asn_val:
                     add_asn_block(asn_val, asn_desc, asn_reason)
@@ -220,7 +228,7 @@ def render_asn_blocking():
                     # Clear blocker cache
                     get_blocker().blocked_asns.clear()
                     st.rerun()
-    
+
     with col2:
         try:
             asn_list = get_asn_blocklist()
@@ -228,7 +236,7 @@ def render_asn_blocking():
                 asn_df = pd.DataFrame(asn_list)
                 asn_df.columns = ["ASN", "Netzwerk", "Gesperrt am", "Grund"]
                 st.dataframe(asn_df, use_container_width=True, hide_index=True)
-                
+
                 asns_to_remove = st.multiselect("Sperre aufheben für ASN", options=asn_df["ASN"].tolist())
                 if st.button("ASN freigeben", disabled=not asns_to_remove):
                     for asn in asns_to_remove:

@@ -5,22 +5,23 @@ import logging
 import os
 import signal
 import sys
-import time
 import threading
+import time
 from pathlib import Path
-from watchdog.observers import Observer
+
+from prometheus_client import Counter, Gauge, start_http_server
 from watchdog.events import FileSystemEventHandler
-from prometheus_client import start_http_server, Counter, Gauge
+from watchdog.observers import Observer
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.config import app_config
 from src.database import cleanup_old_data
 from src.log_parser import init_geoip
 from src.sync import sync_logs
 from src.utils import setup_logging
 from src.utils.npm_sync import check_all_hosts_health
-from src.config import app_config
 
 logger = logging.getLogger(__name__)
 

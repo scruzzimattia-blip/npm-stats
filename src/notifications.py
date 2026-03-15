@@ -2,18 +2,16 @@
 
 import json
 import logging
+import smtplib
 import urllib.request
 from datetime import datetime, timezone
-from typing import Optional
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 from .config import app_config
 
 logger = logging.getLogger(__name__)
 
-
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
 def send_email_notification(subject: str, body: str):
     """Send an email notification via SMTP."""
@@ -22,11 +20,11 @@ def send_email_notification(subject: str, body: str):
 
     try:
         msg = MIMEMultipart()
-        msg['From'] = app_config.smtp_from
-        msg['To'] = app_config.smtp_to
-        msg['Subject'] = subject
+        msg["From"] = app_config.smtp_from
+        msg["To"] = app_config.smtp_to
+        msg["Subject"] = subject
 
-        msg.attach(MIMEText(body, 'plain'))
+        msg.attach(MIMEText(body, "plain"))
 
         with smtplib.SMTP(app_config.smtp_host, app_config.smtp_port) as server:
             if app_config.smtp_user and app_config.smtp_password:
@@ -38,6 +36,7 @@ def send_email_notification(subject: str, body: str):
     except Exception as e:
         logger.error(f"Failed to send email notification: {e}")
 
+
 def send_ntfy_notification(title: str, message: str, priority: str = "default"):
     """Send a notification via ntfy.sh."""
     if not app_config.ntfy_topic:
@@ -45,19 +44,10 @@ def send_ntfy_notification(title: str, message: str, priority: str = "default"):
 
     try:
         url = f"{app_config.ntfy_url.rstrip('/')}/{app_config.ntfy_topic}"
-        headers = {
-            "Title": title,
-            "Priority": priority or app_config.ntfy_priority,
-            "Tags": "no_entry,security"
-        }
-        
-        req = urllib.request.Request(
-            url,
-            data=message.encode("utf-8"),
-            headers=headers,
-            method="POST"
-        )
-        
+        headers = {"Title": title, "Priority": priority or app_config.ntfy_priority, "Tags": "no_entry,security"}
+
+        req = urllib.request.Request(url, data=message.encode("utf-8"), headers=headers, method="POST")
+
         with urllib.request.urlopen(req, timeout=10) as response:
             if 200 <= response.status < 300:
                 logger.info(f"ntfy notification sent to topic {app_config.ntfy_topic}")
@@ -68,21 +58,18 @@ def send_ntfy_notification(title: str, message: str, priority: str = "default"):
         logger.error(f"Error sending ntfy notification: {e}")
     return False
 
+
 def send_notification(ip: str, reason: str, block_until: datetime):
     """Send a notification via all configured channels."""
     if not app_config.notify_on_block:
         return False
 
     success = False
-    
+
     # Common message parts
     title = "🚫 IP Blocked"
-    description = (
-        f"IP Address: {ip}\n"
-        f"Reason: {reason}\n"
-        f"Blocked Until: {block_until.strftime('%Y-%m-%d %H:%M:%S')}"
-    )
-    
+    description = f"IP Address: {ip}\nReason: {reason}\nBlocked Until: {block_until.strftime('%Y-%m-%d %H:%M:%S')}"
+
     # 1. ntfy.sh (High priority)
     if app_config.ntfy_topic:
         if send_ntfy_notification(title, description, "high"):
@@ -97,7 +84,7 @@ def send_notification(ip: str, reason: str, block_until: datetime):
                 f"**Reason:** {reason}\n"
                 f"**Blocked Until:** {block_until.strftime('%Y-%m-%d %H:%M:%S')}"
             )
-            
+
             if "discord.com" in app_config.webhook_url:
                 payload = {
                     "embeds": [
@@ -119,7 +106,7 @@ def send_notification(ip: str, reason: str, block_until: datetime):
                 data=data,
                 headers={"Content-Type": "application/json", "User-Agent": "NPM-Monitor"},
             )
-            
+
             with urllib.request.urlopen(req, timeout=10) as response:
                 if 200 <= response.status < 300:
                     success = True
@@ -129,21 +116,22 @@ def send_notification(ip: str, reason: str, block_until: datetime):
     # 3. Telegram
     if app_config.telegram_bot_token and app_config.telegram_chat_id:
         try:
-            telegram_msg = f"<b>{title}</b>\n\nIP: <code>{ip}</code>\nGrund: {reason}\nSperre bis: {block_until.strftime('%Y-%m-%d %H:%M:%S')}"
+            telegram_msg = (
+                f"<b>{title}</b>\n\n"
+                f"IP: <code>{ip}</code>\n"
+                f"Grund: {reason}\n"
+                f"Sperre bis: {block_until.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
             telegram_url = f"https://api.telegram.org/bot{app_config.telegram_bot_token}/sendMessage"
-            payload = {
-                "chat_id": app_config.telegram_chat_id,
-                "text": telegram_msg,
-                "parse_mode": "HTML"
-            }
-            
+            payload = {"chat_id": app_config.telegram_chat_id, "text": telegram_msg, "parse_mode": "HTML"}
+
             data = json.dumps(payload).encode("utf-8")
             req = urllib.request.Request(
                 telegram_url,
                 data=data,
                 headers={"Content-Type": "application/json", "User-Agent": "NPM-Monitor"},
             )
-            
+
             with urllib.request.urlopen(req, timeout=10) as response:
                 if 200 <= response.status < 300:
                     success = True

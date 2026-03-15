@@ -1,9 +1,10 @@
-import streamlit as st
-import pandas as pd
-import time
-from datetime import datetime, timezone
-import requests
 import os
+import time
+
+import pandas as pd
+import requests
+import streamlit as st
+
 from src.ui_utils import init_page, render_common_sidebar
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8002")

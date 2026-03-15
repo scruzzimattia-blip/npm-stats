@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import pandas as pd
-import psycopg
+import redis
 from psycopg import Connection
 from psycopg import rows as psycopg_rows
 from psycopg_pool import ConnectionPool
@@ -241,16 +241,16 @@ def insert_traffic_batch(rows: List[Tuple]) -> int:
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            with cur.copy(
-                "COPY traffic (time, host, method, path, status, remote_addr, user_agent, referer, response_length, country_code, city, scheme, latitude, longitude) FROM STDIN"
-            ) as copy:
+            copy_sql = (
+                "COPY traffic (time, host, method, path, status, remote_addr, "
+                "user_agent, referer, response_length, country_code, city, "
+                "scheme, latitude, longitude) FROM STDIN"
+            )
+            with cur.copy(copy_sql) as copy:
                 for row in rows:
                     copy.write_row(row)
             return len(rows)
 
-
-import redis
-import json
 
 # Initialize Redis client lazily
 _redis_client: Optional[redis.Redis] = None
@@ -304,7 +304,7 @@ def update_request_counters(ip: str, status: int, is_suspicious: bool = False) -
     # Set TTL to 24h for long-term tracking
     pipe.expire(key, 86400)
 
-    results = pipe.execute()
+    pipe.execute()
 
     # Build result dict
     current_data = r.hgetall(key)
@@ -515,7 +515,7 @@ def get_traffic_metrics(
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
     query = f"""
-        SELECT 
+        SELECT
             COUNT(*) as total_requests,
             COUNT(DISTINCT remote_addr) as unique_ips,
             SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as error_count,
@@ -737,7 +737,7 @@ def get_blocked_ips(active_only: bool = True) -> List[Tuple]:
 def get_blocklist_with_ai_status() -> List[Dict[str, Any]]:
     """Get the active blocklist with AI analysis status."""
     query = """
-        SELECT 
+        SELECT
             b.ip_address, b.reason, b.blocked_at, b.block_until, b.is_manual,
             (SELECT COUNT(*) FROM ai_analysis a WHERE a.ip_address = b.ip_address) as ai_report_count
         FROM blocklist b

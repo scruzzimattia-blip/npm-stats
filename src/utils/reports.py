@@ -1,8 +1,9 @@
 import logging
 from datetime import datetime, timezone
-from fpdf import FPDF
-import pandas as pd
 from typing import Optional
+
+import pandas as pd
+from fpdf import FPDF
 
 logger = logging.getLogger(__name__)
 
@@ -24,18 +25,18 @@ def generate_pdf_report(df: pd.DataFrame, title: str) -> Optional[bytes]:
         pdf = PDFReport()
         pdf.add_page()
         pdf.set_font("Arial", size=12)
-        
+
         pdf.set_font("Arial", "B", 14)
         pdf.cell(0, 10, title, 0, 1)
         pdf.set_font("Arial", size=10)
         pdf.cell(0, 10, f"Generiert am: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}", 0, 1)
         pdf.ln(5)
-        
+
         # Summary
         total_requests = len(df)
         unique_ips = df["remote_addr"].nunique()
         errors = len(df[df["status"] >= 400])
-        
+
         pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 10, "Zusammenfassung", 0, 1)
         pdf.set_font("Arial", size=10)
@@ -43,7 +44,7 @@ def generate_pdf_report(df: pd.DataFrame, title: str) -> Optional[bytes]:
         pdf.cell(0, 8, f"Eindeutige IPs: {unique_ips}", 0, 1)
         pdf.cell(0, 8, f"Fehler-Requests: {errors}", 0, 1)
         pdf.ln(5)
-        
+
         # Top IPs
         pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 10, "Top 5 IP-Adressen", 0, 1)
@@ -52,7 +53,7 @@ def generate_pdf_report(df: pd.DataFrame, title: str) -> Optional[bytes]:
         for ip, count in top_ips.items():
             pdf.cell(0, 8, f"{ip}: {count} Requests", 0, 1)
         pdf.ln(5)
-        
+
         # Top Hosts
         pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 10, "Top 5 Domains", 0, 1)
@@ -60,7 +61,7 @@ def generate_pdf_report(df: pd.DataFrame, title: str) -> Optional[bytes]:
         top_hosts = df["host"].value_counts().head(5)
         for host, count in top_hosts.items():
             pdf.cell(0, 8, f"{host}: {count} Requests", 0, 1)
-            
+
         # Output as bytes
         return pdf.output(dest='S').encode('latin-1')
     except Exception as e:

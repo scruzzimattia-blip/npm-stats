@@ -1,28 +1,28 @@
 """Shared UI utilities for Streamlit pages."""
 
-import time
 import logging
-import streamlit as st
+import time
 from datetime import datetime, timezone
-from typing import Optional, List, Tuple
+from typing import List, Optional
 
+import streamlit as st
+
+from .components import render_sidebar
 from .config import app_config
 from .database import (
-    get_distinct_hosts,
+    cleanup_old_data,
     get_database_info,
+    get_distinct_hosts,
+    get_hourly_traffic_summary,
     get_newest_timestamp,
+    get_top_ips_summary,
     health_check,
     init_database,
-    cleanup_old_data,
     load_traffic_df,
-    get_traffic_count,
-    get_hourly_traffic_summary,
-    get_top_ips_summary
 )
-from .sync import sync_logs as _sync_logs_core
 from .log_parser import init_geoip
+from .sync import sync_logs as _sync_logs_core
 from .utils import setup_logging
-from .components import render_sidebar
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def init_page(title: str, icon: str = "🌐"):
     init_geoip()
     init_database()
     app_config.load_dynamic_settings()
-    
+
     if not health_check():
         st.error("Datenbankverbindung fehlgeschlagen!")
         st.stop()

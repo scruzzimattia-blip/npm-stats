@@ -2,17 +2,16 @@
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Set
+from typing import Dict, Optional, Set
 
 from .config import app_config
 from .database import (
-    update_request_counters,
-    reset_request_counters,
     cleanup_trackers,
+    get_asn_blocklist,
     get_tracked_ip_count,
     get_whitelist,
-    get_asn_blocklist,
-    get_threat_score
+    reset_request_counters,
+    update_request_counters,
 )
 from .notifications import send_notification
 from .utils.whois import get_whois_info
@@ -53,6 +52,7 @@ class IPBlocker:
         if app_config.enable_cloudflare:
             try:
                 from .cloudflare_waf import get_cloudflare_manager
+
                 self._cloudflare = get_cloudflare_manager()
                 if self._cloudflare:
                     logger.info("Cloudflare-level blocking enabled")
@@ -66,6 +66,7 @@ class IPBlocker:
         if app_config.enable_crowdsec:
             try:
                 from .crowdsec import get_crowdsec_manager
+
                 self._crowdsec = get_crowdsec_manager()
                 if self._crowdsec:
                     logger.info("CrowdSec reputation checks enabled")
@@ -75,17 +76,18 @@ class IPBlocker:
     def _refresh_lists_if_needed(self):
         """Refresh whitelists and blocklists periodically to avoid DB hammering."""
         import time
+
         now = time.time()
         if now - self._last_list_refresh > 60:  # Refresh every 60 seconds
             try:
                 # Refresh whitelist
                 whitelist = get_whitelist()
                 self.whitelisted_ips = {row["ip_address"] for row in whitelist}
-                
+
                 # Refresh ASN blocklist
                 asn_list = get_asn_blocklist()
                 self.blocked_asns = {row["asn"] for row in asn_list}
-                
+
                 self._last_list_refresh = now
             except Exception as e:
                 logger.error(f"Failed to refresh blocking lists: {e}")
@@ -125,14 +127,14 @@ class IPBlocker:
         self.blocked_ips[ip] = block_until
 
         # Block at firewall level if enabled
-        if self.use_firewall and hasattr(self, '_iptables') and self._iptables:
+        if self.use_firewall and hasattr(self, "_iptables") and self._iptables:
             try:
                 self._iptables.block_ip(ip, reason)
             except Exception as e:
                 logger.error(f"Failed to block IP {ip} at firewall level: {e}")
 
         # Block at Cloudflare level if enabled
-        if hasattr(self, '_cloudflare') and self._cloudflare:
+        if hasattr(self, "_cloudflare") and self._cloudflare:
             try:
                 self._cloudflare.block_ip(ip, reason)
             except Exception as e:
@@ -156,7 +158,7 @@ class IPBlocker:
 
         # 0. Check for ASN block
         if self._is_asn_blocked(ip):
-            reason = f"ASN ist blockiert (Netzwerk-Sperre)"
+            reason = "ASN ist blockiert (Netzwerk-Sperre)"
             return reason
 
         # 0.1 Geo-Blocking Check
@@ -168,7 +170,7 @@ class IPBlocker:
                 block_until = datetime.now(timezone.utc) + timedelta(days=1)
                 self._block_ip(ip, reason, block_until)
                 return reason
-            
+
             # Check if only specific countries are allowed
             if app_config.allow_only_countries and country_code not in app_config.allow_only_countries:
                 reason = f"Land {country_code} ist nicht in der Erlaubt-Liste (Geo-Blocking)"
@@ -191,7 +193,7 @@ class IPBlocker:
         multiplier = 1.0
         if self._is_sensitive_path(path):
             multiplier *= 3.0  # Errors on sensitive paths are much worse
-        
+
         if self._is_datacenter_asn(ip):
             multiplier *= 2.0  # Traffic from Data Centers is more suspicious
 
@@ -225,25 +227,30 @@ class IPBlocker:
 
         # 2. Regular suspicious path check
         is_suspicious = self._is_suspicious_path(path)
-        
+
         # Update counters in DB and get current totals
         try:
             # We apply the multiplier manually to the threat score increment
             # (Note: database.py doesn't know about the multiplier yet, so we use a separate update)
             counts = update_request_counters(ip, status, is_suspicious)
-            
+
             # Apply multiplier to existing increment logic
             if multiplier > 1.0:
                 score_to_add = 0
-                if is_suspicious: score_to_add = 30 * (multiplier - 1)
-                elif status == 403: score_to_add = 20 * (multiplier - 1)
-                elif status == 404: score_to_add = 5 * (multiplier - 1)
-                
+                if is_suspicious:
+                    score_to_add = 30 * (multiplier - 1)
+                elif status == 403:
+                    score_to_add = 20 * (multiplier - 1)
+                elif status == 404:
+                    score_to_add = 5 * (multiplier - 1)
+
                 if score_to_add > 0:
                     from .database import update_threat_score
+
                     update_threat_score(ip, int(score_to_add))
                     # Refresh counts
                     from .database import get_redis
+
                     counts["threat_score"] = int(get_redis().hget(f"tracker:{ip}", "threat_score") or 0)
 
         except Exception as e:
@@ -252,7 +259,7 @@ class IPBlocker:
 
         # Check thresholds
         reason = self._check_thresholds(counts)
-        
+
         # Check CrowdSec reputation if not already blocked
         if not reason and self._crowdsec:
             if is_suspicious or status >= 400:
@@ -263,7 +270,7 @@ class IPBlocker:
             block_until = datetime.now(timezone.utc) + timedelta(seconds=app_config.block_duration)
             self._block_ip(ip, reason, block_until)
             logger.warning(f"Blocking IP {ip}: {reason}")
-            
+
             # Send notification
             send_notification(ip, reason, block_until)
 
@@ -273,12 +280,22 @@ class IPBlocker:
         """Check if user agent matches known malicious actors or scanners."""
         if not user_agent or user_agent == "-":
             return False
-            
+
         ua_lower = user_agent.lower()
         bad_uas = [
-            "zgrab", "masscan", "nmap", "sqlmap", "nikto", "dirbuster",
-            "netsparker", "wpscan", "nuclei", "censys", "shodan", "mirai",
-            "hello, world"
+            "zgrab",
+            "masscan",
+            "nmap",
+            "sqlmap",
+            "nikto",
+            "dirbuster",
+            "netsparker",
+            "wpscan",
+            "nuclei",
+            "censys",
+            "shodan",
+            "mirai",
+            "hello, world",
         ]
         return any(bad_ua in ua_lower for bad_ua in bad_uas)
 
@@ -286,40 +303,58 @@ class IPBlocker:
         """Check for SQLi, XSS, Path Traversal or Command Injection patterns."""
         if not path:
             return None
-            
+
         path_lower = path.lower()
-        
+
         # 1. SQLi heuristic
         sqli_patterns = [
-            "union select", "union all select", "' or '1'='1", '" or "1"="1',
-            "@@version", "information_schema", "sysobjects", "syscolumns"
+            "union select",
+            "union all select",
+            "' or '1'='1",
+            '" or "1"="1',
+            "@@version",
+            "information_schema",
+            "sysobjects",
+            "syscolumns",
         ]
         if any(pattern in path_lower for pattern in sqli_patterns):
             return "SQL-Injection Versuch (WAF Heuristik)"
-            
+
         # 2. XSS heuristic
-        xss_patterns = [
-            "<script", "%3cscript", "javascript:", "onerror=", "onload=", "alert("
-        ]
+        xss_patterns = ["<script", "%3cscript", "javascript:", "onerror=", "onload=", "alert("]
         if any(pattern in path_lower for pattern in xss_patterns):
             return "XSS Versuch (WAF Heuristik)"
-            
+
         # 3. Path Traversal
         traversal_patterns = [
-            "../", "..\\", "/etc/passwd", "/etc/shadow", "/etc/group",
-            "c:\\windows", "boot.ini", "/proc/self"
+            "../",
+            "..\\",
+            "/etc/passwd",
+            "/etc/shadow",
+            "/etc/group",
+            "c:\\windows",
+            "boot.ini",
+            "/proc/self",
         ]
         if any(pattern in path_lower for pattern in traversal_patterns):
             return "Path Traversal Versuch (WAF Heuristik)"
-            
+
         # 4. Command Injection
         cmd_patterns = [
-            "; curl ", "; wget ", "; chmod ", "; chown ", "; rm -rf",
-            "| curl ", "| wget ", "| chmod ", "`curl ", "`wget "
+            "; curl ",
+            "; wget ",
+            "; chmod ",
+            "; chown ",
+            "; rm -rf",
+            "| curl ",
+            "| wget ",
+            "| chmod ",
+            "`curl ",
+            "`wget ",
         ]
         if any(pattern in path_lower for pattern in cmd_patterns):
             return "Command Injection Versuch (WAF Heuristik)"
-            
+
         return None
 
     def _is_sensitive_path(self, path: str) -> bool:
@@ -332,29 +367,43 @@ class IPBlocker:
 
     def _is_datacenter_asn(self, ip: str) -> bool:
         """Heuristic to check if an IP belongs to a Data Center (hosting provider)."""
-        # Get WHOIS info (already has caching in get_whois_info via IPWhois internally if used, 
+        # Get WHOIS info (already has caching in get_whois_info via IPWhois internally if used,
         # but here we use our own session cache)
         try:
             whois = get_whois_info(ip)
             if not whois:
                 return False
-                
+
             desc = whois.get("asn_description", "").lower()
             net_name = whois.get("network_name", "").lower()
-            
+
             # Known Data Center / Hosting keywords
             dc_keywords = [
-                "hetzner", "digitalocean", "amazon", "aws", "google cloud", 
-                "ovh", "linode", "vultr", "leaseweb", "contabo", "intergrid", 
-                "hosting", "server", "cloud", "datacenter", "m247", "akamai"
+                "hetzner",
+                "digitalocean",
+                "amazon",
+                "aws",
+                "google cloud",
+                "ovh",
+                "linode",
+                "vultr",
+                "leaseweb",
+                "contabo",
+                "intergrid",
+                "hosting",
+                "server",
+                "cloud",
+                "datacenter",
+                "m247",
+                "akamai",
             ]
-            
+
             for kw in dc_keywords:
                 if kw in desc or kw in net_name:
                     return True
         except Exception:
             pass
-            
+
         return False
 
     def _check_thresholds(self, counts: Dict[str, int]) -> Optional[str]:
@@ -377,7 +426,10 @@ class IPBlocker:
             return f"Too many failed requests ({counts['total_failed']}/{app_config.max_failed_requests})"
 
         if counts["count_suspicious"] >= app_config.max_suspicious_paths:
-            return f"Suspicious activity detected ({counts['count_suspicious']}/{app_config.max_suspicious_paths} suspicious paths)"
+            return (
+                f"Suspicious activity detected "
+                f"({counts['count_suspicious']}/{app_config.max_suspicious_paths} suspicious paths)"
+            )
 
         # Rate Limit Check (total requests per 5 minutes)
         if counts["total_requests"] >= (app_config.max_requests_per_minute * 5):
@@ -388,8 +440,9 @@ class IPBlocker:
     def _is_verified_bot(self, ip: str, user_agent: str) -> bool:
         """Verify if a bot claiming to be Google/Bing is actually from them using RDNS."""
         import socket
+
         ua_lower = user_agent.lower()
-        
+
         # Check for Googlebot
         if "googlebot" in ua_lower:
             try:
@@ -403,7 +456,7 @@ class IPBlocker:
                 return verified_ip == ip
             except Exception:
                 return False
-                
+
         # Check for Bingbot
         if "bingbot" in ua_lower:
             try:
@@ -414,7 +467,7 @@ class IPBlocker:
                 return verified_ip == ip
             except Exception:
                 return False
-                
+
         # For other bots (not critical search engines), we trust for now
         # but could be extended
         return True
@@ -430,19 +483,27 @@ class IPBlocker:
     def _is_honey_path(self, path: str) -> bool:
         """Check if path is a honey path (immediate 1-year ban for critical bait)."""
         path_lower = path.lower()
-        
+
         # Enterprise Bait Paths
         bait_paths = [
-            "/.env", "/.git", "/wp-config.php", "/config.php", 
-            "/phpmyadmin", "/myadmin", "/pma", 
-            "/admin/config.php", "/backup.sql", "/dump.sql",
-            "/.aws/credentials", "/.ssh/id_rsa"
+            "/.env",
+            "/.git",
+            "/wp-config.php",
+            "/config.php",
+            "/phpmyadmin",
+            "/myadmin",
+            "/pma",
+            "/admin/config.php",
+            "/backup.sql",
+            "/dump.sql",
+            "/.aws/credentials",
+            "/.ssh/id_rsa",
         ]
-        
+
         for honey in bait_paths:
             if honey.lower() == path_lower or honey.lower() in path_lower:
                 return True
-        
+
         # User defined honey paths
         for honey in app_config.honey_paths:
             if honey.lower() == path_lower or honey.lower() in path_lower:
@@ -481,7 +542,7 @@ class IPBlocker:
         """Check if IP is in whitelist (local cache or DB)."""
         if ip in self.whitelisted_ips:
             return True
-        
+
         # Check DB
         try:
             whitelist = get_whitelist()

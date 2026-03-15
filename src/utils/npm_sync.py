@@ -1,15 +1,17 @@
 """Utility to sync and fetch hosts from Nginx Proxy Manager database."""
 import logging
-import requests
-import ssl
 import socket
+import ssl
 import time
-import streamlit as st
-from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
-from sqlalchemy import create_engine, text
-from ..config import app_config
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+import requests
+import streamlit as st
+from sqlalchemy import create_engine, text
+
+from ..config import app_config
 from ..database import update_host_health
 
 logger = logging.getLogger(__name__)
@@ -37,17 +39,17 @@ def _fetch_npm_proxy_hosts_core() -> List[Dict[str, Any]]:
         return []
 
     query = """
-        SELECT 
-            domain_names, 
-            forward_host, 
-            forward_port, 
-            enabled, 
+        SELECT
+            domain_names,
+            forward_host,
+            forward_port,
+            enabled,
             ssl_forced,
             meta
         FROM proxy_host
         WHERE is_deleted = 0
     """
-    
+
     hosts = []
     try:
         engine = get_npm_engine()
@@ -64,7 +66,7 @@ def _fetch_npm_proxy_hosts_core() -> List[Dict[str, Any]]:
                     domains = [d.strip(' "\'') for d in clean_domains if d.strip(' "\'')]
                 else:
                     domains = []
-                
+
                 if domains:
                     logger.debug(f"Found host: {domains[0]} forwarding to {row['forward_host']}:{row['forward_port']}")
 
@@ -95,7 +97,7 @@ def get_ssl_expiry(hostname: str) -> Optional[datetime]:
                     # Note: getpeercert() returns None if verify_mode is CERT_NONE
                     # So we actually need a separate context for the expiry check
                     pass
-        
+
         # Second attempt for expiry info with verification
         context = ssl.create_default_context()
         with socket.create_connection((hostname, 443), timeout=3) as sock:
@@ -149,7 +151,7 @@ def check_all_hosts_health():
     max_workers = min(10, len(hosts))
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         executor.map(check_single_host, hosts)
-    
+
     logger.info(f"Finished health check for {len(hosts)} hosts.")
 
 

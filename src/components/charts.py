@@ -1,6 +1,8 @@
 """Charts components for Streamlit application."""
 
-from typing import Dict, List, Optional
+from typing import Dict, Optional
+
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -12,8 +14,6 @@ from ..utils import (
     parse_user_agent,
 )
 
-
-import altair as alt
 
 def render_charts(df: pd.DataFrame, hourly_summary: pd.DataFrame = None) -> None:
     """Render traffic charts with optimized hourly summary."""
@@ -35,7 +35,7 @@ def render_charts(df: pd.DataFrame, hourly_summary: pd.DataFrame = None) -> None
                 index=2,
                 label_visibility="collapsed",
             )
-        
+
         # Prepare Data
         if hourly_summary is not None and not hourly_summary.empty and selected_granularity == "1 Stunde":
             time_df = hourly_summary.set_index("hour")["request_count"].reset_index()
@@ -55,11 +55,11 @@ def render_charts(df: pd.DataFrame, hourly_summary: pd.DataFrame = None) -> None
 
         # Build Altair Chart
         base = alt.Chart(time_df).encode(x=alt.X('time:T', title='Zeit'))
-        
+
         area = base.mark_area(opacity=0.5, color='#3182bd').encode(
             y=alt.Y('Requests:Q', title='Requests')
         )
-        
+
         points = base.mark_circle(size=60).encode(
             y='Requests:Q',
             color=alt.condition(
@@ -69,7 +69,7 @@ def render_charts(df: pd.DataFrame, hourly_summary: pd.DataFrame = None) -> None
             ),
             tooltip=['time', 'Requests', 'Anomaly']
         )
-        
+
         st.altair_chart(area + points, use_container_width=True)
 
     with col2:
@@ -254,7 +254,7 @@ def render_user_agent_analysis(df: pd.DataFrame) -> None:
         # Parse user agents (only unique values, then map back)
         unique_uas = df["user_agent"].dropna().unique()
         ua_map = {ua: parse_user_agent(ua) for ua in unique_uas}
-        
+
         # Create DataFrame more efficiently from list of dicts
         parsed_uas = [ua_map[ua] for ua in df["user_agent"].dropna()]
         ua_data = pd.DataFrame(parsed_uas)

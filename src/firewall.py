@@ -39,13 +39,7 @@ class IptablesManager:
 
         try:
             # Try to list rules (requires NET_ADMIN capability)
-            result = self._run_iptables(["-L", self.CHAIN_NAME, "-n"])
-            # If chain doesn't exist, we'll get an error, but that's ok
-            # We have permissions if we can run iptables at all
-            return True
-        except subprocess.SubprocessError as e:
-            logger.warning(f"No permissions to manage iptables: {e}")
-            return False
+            self._run_iptables(["-L", self.CHAIN_NAME, "-n"])
             # If chain doesn't exist, we'll get an error, but that's ok
             # We have permissions if we can run iptables at all
             return True

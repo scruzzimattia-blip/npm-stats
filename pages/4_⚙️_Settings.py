@@ -1,18 +1,20 @@
+
 import streamlit as st
-import os
-from src.ui_utils import init_page, render_common_sidebar, _cached_db_info
+
 from src.config import app_config
 from src.database import update_setting
+from src.ui_utils import _cached_db_info, init_page, render_common_sidebar
+
 
 def main():
     init_page("Einstellungen", "⚙️")
     st.title("⚙️ Systemeinstellungen")
-    
+
     render_common_sidebar()
 
     tab_gen, tab_sec, tab_ai, tab_notify, tab_user, tab_db = st.tabs([
-        "🏠 Allgemein", 
-        "🛡️ Sicherheit & Blocking", 
+        "🏠 Allgemein",
+        "🛡️ Sicherheit & Blocking",
         "🤖 AI & KI Analyse",
         "🔔 Benachrichtigungen",
         "👥 Benutzer",
@@ -23,18 +25,18 @@ def main():
         st.subheader("Allgemeine Konfiguration")
         with st.form("general_settings"):
             retention = st.number_input(
-                "Daten-Retention (Tage)", 
-                min_value=1, max_value=365, 
+                "Daten-Retention (Tage)",
+                min_value=1, max_value=365,
                 value=app_config.retention_days,
                 help="Wie lange sollen Traffic-Logs in der Datenbank gespeichert werden?"
             )
-            
+
             enable_geoip = st.checkbox(
-                "GeoIP Aktivieren", 
+                "GeoIP Aktivieren",
                 value=app_config.enable_geoip,
                 help="Erfordert MaxMind Datenbank im geoip Verzeichnis."
             )
-            
+
             if st.form_submit_button("Allgemein Speichern"):
                 update_setting("retention_days", retention)
                 update_setting("enable_geoip", enable_geoip)
@@ -44,24 +46,24 @@ def main():
     with tab_sec:
         st.subheader("🛡️ Erweiterte Sicherheit")
         st.info("Diese Einstellungen erhöhen die Sicherheit deines Dashboards gegen Brute-Force und Scanner.")
-        
+
         with st.form("security_hardening"):
             col_h1, col_h2 = st.columns(2)
             with col_h1:
                 allowed_nets = st.text_area(
-                    "Erlaubte Netzwerke (IP-Allowlist, kommagetrennt)", 
+                    "Erlaubte Netzwerke (IP-Allowlist, kommagetrennt)",
                     value=",".join(app_config.allowed_networks),
                     help="Nur diese IPs dürfen auf das Dashboard zugreifen. Leer lassen für Zugriff von überall (nicht empfohlen)."
                 )
             with col_h2:
                 honey_dur = st.number_input(
-                    "Honeypot Sperrdauer (Sekunden)", 
+                    "Honeypot Sperrdauer (Sekunden)",
                     value=app_config.honey_pot_duration,
                     help="Dauer der Sperre, wenn ein Honeypot (z.B. /.env) aufgerufen wird. Standard: 31536000 (1 Jahr)."
                 )
-            
+
             enable_auth = st.checkbox("Authentifizierung Erzwingen", value=app_config.enable_auth)
-            
+
             if st.form_submit_button("Härtung Speichern"):
                 update_setting("allowed_networks", allowed_nets)
                 update_setting("honey_pot_duration", honey_dur)
@@ -83,27 +85,27 @@ def main():
                 max_suspicious = st.number_input("Max. verdächtige Pfade", value=app_config.max_suspicious_paths)
                 max_rate = st.number_input("Rate-Limit (Requests/Min)", value=app_config.max_requests_per_minute)
                 block_dur = st.number_input("Sperrdauer (Sekunden)", value=app_config.block_duration, step=60)
-            
+
             suspicious_paths = st.text_area(
-                "Verdächtige Pfade (kommagetrennt)", 
+                "Verdächtige Pfade (kommagetrennt)",
                 value=",".join(app_config.suspicious_paths),
                 help="Pfade, die sofort als verdächtig markiert werden (z.B. /wp-admin)"
             )
 
             sensitive_paths = st.text_area(
-                "Sensible Pfade (STRENGE BESTRAFUNG, kommagetrennt)", 
+                "Sensible Pfade (STRENGE BESTRAFUNG, kommagetrennt)",
                 value=",".join(app_config.sensitive_paths),
                 help="Fehler auf diesen Pfaden (z.B. /login) erhöhen den Bedrohungsscore dreifach."
             )
 
             honey_paths = st.text_area(
-                "🍯 Honey-Paths (SOFORT-SPERRE, kommagetrennt)", 
+                "🍯 Honey-Paths (SOFORT-SPERRE, kommagetrennt)",
                 value=",".join(app_config.honey_paths),
                 help="Pfade, die bei AUFRUF zur sofortigen permanenten Sperre führen (z.B. /.env)"
             )
-            
+
             enable_blocking = st.checkbox("Automatisches Blocking Aktiv", value=app_config.enable_blocking)
-            
+
             if st.form_submit_button("Sicherheit Speichern"):
                 update_setting("max_404_errors", max_404)
                 update_setting("max_403_errors", max_403)
@@ -118,7 +120,7 @@ def main():
                 update_setting("enable_blocking", enable_blocking)
                 st.success("Sicherheitseinstellungen gespeichert!")
                 st.rerun()
-        
+
         st.divider()
         st.subheader("🌐 Cloudflare Edge Blocking")
         st.info("Blockiert IPs direkt bei Cloudflare, bevor sie deinen Server erreichen.")
@@ -126,14 +128,14 @@ def main():
             enable_cf = st.checkbox("Cloudflare Integration Aktivieren", value=app_config.enable_cloudflare)
             cf_token = st.text_input("Cloudflare API Token", value=app_config.cloudflare_api_token, type="password", help="Berechtigung: Zone.Firewall Services (Edit)")
             cf_zone = st.text_input("Cloudflare Zone ID", value=app_config.cloudflare_zone_id)
-            
+
             if st.form_submit_button("Cloudflare Speichern"):
                 update_setting("enable_cloudflare", enable_cf)
                 update_setting("cloudflare_api_token", cf_token)
                 update_setting("cloudflare_zone_id", cf_zone)
                 st.success("Cloudflare-Einstellungen gespeichert!")
                 st.rerun()
-        
+
         st.divider()
         st.subheader("🛡️ CrowdSec Reputation")
         st.info("Prüft IPs gegen die lokale CrowdSec Datenbank (LAPI).")
@@ -141,7 +143,7 @@ def main():
             enable_cs = st.checkbox("CrowdSec Integration Aktivieren", value=app_config.enable_crowdsec)
             cs_url = st.text_input("CrowdSec LAPI URL", value=app_config.crowdsec_api_url)
             cs_key = st.text_input("CrowdSec API Key", value=app_config.crowdsec_api_key, type="password")
-            
+
             if st.form_submit_button("CrowdSec Speichern"):
                 update_setting("enable_crowdsec", enable_cs)
                 update_setting("crowdsec_api_url", cs_url)
@@ -154,35 +156,35 @@ def main():
         st.info("Nutze LLMs (wie Gemini oder DeepSeek) um das Verhalten von verdächtigen IPs tiefgehend zu analysieren.")
         with st.form("ai_settings"):
             openrouter_key = st.text_input(
-                "OpenRouter API Key", 
-                value=app_config.openrouter_api_key, 
+                "OpenRouter API Key",
+                value=app_config.openrouter_api_key,
                 type="password",
                 help="Erforderlich für KI-Analyse. Hole dir einen Key auf openrouter.ai"
             )
             ai_model = st.text_input(
-                "KI Modell", 
+                "KI Modell",
                 value=app_config.ai_model,
                 help="Standard: google/gemini-2.0-flash-lite:free"
             )
             enable_ai_auto = st.checkbox(
-                "Auto-KI-Analyse", 
+                "Auto-KI-Analyse",
                 value=app_config.enable_ai_auto_analysis,
                 help="Analysiert jede blockierte IP automatisch im Hintergrund."
             )
-            
+
             if st.form_submit_button("KI-Einstellungen Speichern"):
                 update_setting("openrouter_api_key", openrouter_key)
                 update_setting("ai_model", ai_model)
                 update_setting("enable_ai_auto_analysis", enable_ai_auto)
                 st.success("KI-Einstellungen gespeichert!")
                 st.rerun()
-        
+
         st.divider()
         st.subheader("🔄 NPM Host Auto-Discovery")
         st.info("Verbindet sich mit der Nginx Proxy Manager Datenbank, um Hosts automatisch zu erkennen.")
         with st.form("npm_db_settings"):
             db_type = st.selectbox("DB Typ", ["mysql", "sqlite"], index=0 if app_config.npm_db_type == "mysql" else 1)
-            
+
             if db_type == "mysql":
                 c1, c2 = st.columns(2)
                 with c1:
@@ -213,26 +215,26 @@ def main():
         with st.form("notification_settings"):
             st.write("**Webhook (Discord / Slack)**")
             webhook = st.text_input(
-                "Webhook URL", 
+                "Webhook URL",
                 value=app_config.webhook_url,
                 placeholder="https://discord.com/api/webhooks/...",
                 help="Discord, Slack oder kompatible Webhooks"
             )
-            
+
             st.divider()
             st.write("**Telegram Bot**")
             tg_token = st.text_input("Telegram Bot Token", value=app_config.telegram_bot_token, type="password")
             tg_chat = st.text_input("Telegram Chat ID", value=app_config.telegram_chat_id)
-            
+
             st.divider()
             st.write("**ntfy.sh (Echtzeit-Push)**")
             ntfy_u = st.text_input("ntfy Server URL", value=app_config.ntfy_url)
             ntfy_t = st.text_input("ntfy Topic", value=app_config.ntfy_topic, placeholder="mein_geheimes_thema")
             ntfy_p = st.selectbox("Standard Priorität", ["min", "low", "default", "high", "urgent"], index=2)
-            
+
             st.divider()
             notify = st.checkbox("Benachrichtigung bei Blockierung senden", value=app_config.notify_on_block)
-            
+
             if st.form_submit_button("Alerting Speichern"):
                 update_setting("webhook_url", webhook)
                 update_setting("telegram_bot_token", tg_token)
@@ -246,15 +248,16 @@ def main():
 
     with tab_user:
         st.subheader("👥 Benutzerverwaltung")
-        from src.database import list_users, create_user, update_user_totp_secret, get_user
-        from src.auth import hash_password
         import pyotp
         import qrcode
-        
+
+        from src.auth import hash_password
+        from src.database import create_user, get_user, list_users, update_user_totp_secret
+
         users = list_users()
         st.write(f"Aktuelle Benutzer: {len(users)}")
         st.table(users)
-        
+
         with st.expander("➕ Neuen Benutzer hinzufügen"):
             with st.form("new_user_form", clear_on_submit=True):
                 new_name = st.text_input("Benutzername")
@@ -275,7 +278,7 @@ def main():
                 st.warning("Bitte logge dich erneut ein, um MFA zu konfigurieren.")
             else:
                 db_user = get_user(current_user["username"])
-                
+
                 if db_user and db_user.get("totp_secret"):
                     st.success("✅ MFA ist für deinen Account aktiviert.")
                     if st.button("MFA Deaktivieren", type="primary"):
@@ -286,18 +289,18 @@ def main():
                     st.info("MFA ist aktuell deaktiviert. Generiere einen neuen Code, um es einzurichten.")
                     if "totp_secret" not in st.session_state:
                         st.session_state.totp_secret = pyotp.random_base32()
-                    
+
                     secret = st.session_state.totp_secret
                     totp = pyotp.TOTP(secret)
                     uri = totp.provisioning_uri(name=current_user.get("username", "user"), issuer_name="NPM Monitor")
-                    
+
                     st.write("**Schritt 1:** Scanne diesen QR-Code mit einer Authenticator-App (z.B. Google Authenticator, Authy, Aegis).")
-                    
+
                     qr = qrcode.make(uri)
                     st.image(qr.get_image(), width=200)
-                    
+
                     st.write(f"Oder gib diesen Code manuell ein: `{secret}`")
-                    
+
                     st.write("**Schritt 2:** Gib den aktuellen 6-stelligen Code ein, um die Einrichtung abzuschließen.")
                     with st.form("verify_mfa"):
                         code = st.text_input("6-stelliger Code")
@@ -312,14 +315,14 @@ def main():
     with tab_db:
         st.subheader("Datenbank Status")
         db_info = _cached_db_info()
-        
+
         stats_col1, stats_col2, stats_col3 = st.columns(3)
         stats_col1.metric("Gesamt Einträge", db_info["total_rows"])
         stats_col2.metric("Aktive Sperren", db_info["blocked_count"])
         stats_col3.metric("DB Größe", db_info["table_size"])
-        
+
         st.divider()
-        
+
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🗑️ UI-Cache leeren", use_container_width=True):

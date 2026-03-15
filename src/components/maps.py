@@ -1,12 +1,10 @@
 """Map components for NPM Monitor."""
 
-import pandas as pd
-import streamlit as st
-import pydeck as pdk
-import folium
-from streamlit_folium import st_folium
-from folium.plugins import MarkerCluster
 import os
+
+import pandas as pd
+import pydeck as pdk
+import streamlit as st
 
 # Default server coordinates (can be overridden by environment)
 SERVER_LAT = float(os.getenv("SERVER_LAT", "51.1657"))
@@ -20,20 +18,20 @@ def render_geo_map(df: pd.DataFrame) -> None:
 
     # Filter and group
     map_df = df.dropna(subset=["latitude", "longitude"]).copy()
-    
+
     if map_df.empty:
         st.info("Keine gültigen Koordinaten in den aktuellen Daten gefunden.")
         return
 
     st.subheader("🗺️ Live Threat Map (3D)")
-    
+
     # 1. Aggregate points for base visualization
     agg_df = map_df.groupby(["latitude", "longitude", "city", "country_code"]).size().reset_index(name="count")
-    
+
     # 2. Create Arc Data (From Attacker to Server)
     agg_df["server_lat"] = SERVER_LAT
     agg_df["server_lon"] = SERVER_LON
-    
+
     # Define layers
     # Hexagon/Heatmap for volume
     point_layer = pdk.Layer(
@@ -89,7 +87,7 @@ def render_geo_map(df: pd.DataFrame) -> None:
             "style": {"color": "white"}
         }
     )
-    
+
     st.pydeck_chart(r)
 
     # Small legend
