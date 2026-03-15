@@ -143,13 +143,35 @@ def _cached_traffic_metrics(
 
 def render_common_sidebar():
     """Render the standard sidebar and return filter values."""
-    return render_sidebar(
+    from streamlit_autorefresh import st_autorefresh
+    
+    # Get all sidebar values
+    selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query, selected_status = render_sidebar(
         cached_hosts=_cached_hosts,
         cached_db_info=_cached_db_info,
         get_newest_timestamp=get_newest_timestamp,
         sync_logs_callback=sync_logs,
         cleanup_old_data_callback=cleanup_old_data,
     )
+
+    # Global Auto-Refresh implementation
+    if auto_refresh:
+        st_autorefresh(interval=refresh_interval * 1000, key="global_refresh")
+        
+        # Auto-Sync Logic: If data is older than 2 minutes, sync automatically
+        newest = get_newest_timestamp()
+        if newest:
+            # Handle timezone-aware vs naive comparison
+            now = datetime.now(newest.tzinfo) if newest.tzinfo else datetime.now(timezone.utc)
+            if (now - newest).total_seconds() > 120:
+                # Limit frequency of auto-syncs to avoid overloading
+                last_auto_sync = st.session_state.get("last_auto_sync", 0)
+                if time.time() - last_auto_sync > 30:
+                    sync_logs()
+                    st.session_state.last_auto_sync = time.time()
+                    st.toast("Automatischer Sync durchgeführt", icon="🔄")
+
+    return selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query, selected_status
 
 
 def handle_sync_button():

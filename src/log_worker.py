@@ -90,15 +90,31 @@ def run_log_worker() -> None:
     sync_logs()
 
     sync_interval = int(os.getenv("SYNC_INTERVAL", "60"))
+    last_sync_time = time.time()
 
     while not shutdown_requested:
         try:
             # Wait for changes or periodic fallback
-            timeout = 1.0 if observer.is_alive() else float(sync_interval)
-            event_handler.sync_requested.wait(timeout=timeout)
+            # We want to sync at least every sync_interval seconds
+            now = time.time()
+            time_since_last_sync = now - last_sync_time
+            wait_timeout = max(0.1, float(sync_interval) - time_since_last_sync)
+            
+            # If watchdog is alive, wait for its event with timeout
+            # If watchdog is not alive, just sleep for the remaining interval
+            if observer.is_alive():
+                event_handler.sync_requested.wait(timeout=wait_timeout)
+            else:
+                time.sleep(wait_timeout)
 
-            if event_handler.sync_requested.is_set() or not observer.is_alive():
+            # Sync if event was triggered, or sync_interval passed, or observer died
+            now = time.time()
+            if (event_handler.sync_requested.is_set() or 
+                (now - last_sync_time >= sync_interval) or 
+                not observer.is_alive()):
+                
                 event_handler.sync_requested.clear()
+                last_sync_time = now
 
                 start = time.time()
                 inserted = sync_logs()
@@ -108,6 +124,9 @@ def run_log_worker() -> None:
                 if inserted > 0:
                     METRIC_REQUESTS.inc(inserted)
                     logger.info(f"Processed {inserted} new log entries in {duration:.2f}s")
+                elif not observer.is_alive():
+                    # If observer is dead, we log every periodic sync for visibility
+                    logger.debug(f"Periodic sync completed: 0 new entries")
 
         except Exception as e:
             logger.error(f"Log worker error: {e}")
