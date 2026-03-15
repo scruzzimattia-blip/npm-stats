@@ -31,6 +31,47 @@ class IPBlocker:
         self.use_firewall = use_firewall
         self._last_list_refresh = 0.0
 
+        # Initialize firewall manager if enabled
+        self._iptables = None
+        if use_firewall:
+            try:
+                from .firewall import get_iptables_manager
+
+                self._iptables = get_iptables_manager()
+                if self._iptables.has_permissions:
+                    logger.info("Firewall-level blocking enabled (iptables)")
+                    self._iptables.create_chain()
+                else:
+                    logger.warning("Firewall permissions not available, using application-level blocking only")
+                    self.use_firewall = False
+            except Exception as e:
+                logger.error(f"Failed to initialize iptables: {e}")
+                self.use_firewall = False
+
+        # Initialize Cloudflare manager if enabled
+        self._cloudflare = None
+        if app_config.enable_cloudflare:
+            try:
+                from .cloudflare_waf import get_cloudflare_manager
+                self._cloudflare = get_cloudflare_manager()
+                if self._cloudflare:
+                    logger.info("Cloudflare-level blocking enabled")
+                else:
+                    logger.warning("Cloudflare enabled but manager could not be initialized (check API credentials)")
+            except Exception as e:
+                logger.error(f"Failed to initialize Cloudflare: {e}")
+
+        # Initialize CrowdSec manager if enabled
+        self._crowdsec = None
+        if app_config.enable_crowdsec:
+            try:
+                from .crowdsec import get_crowdsec_manager
+                self._crowdsec = get_crowdsec_manager()
+                if self._crowdsec:
+                    logger.info("CrowdSec reputation checks enabled")
+            except Exception as e:
+                logger.error(f"Failed to initialize CrowdSec: {e}")
+
     def _refresh_lists_if_needed(self):
         """Refresh whitelists and blocklists periodically to avoid DB hammering."""
         import time
@@ -76,6 +117,34 @@ class IPBlocker:
         return ip in self.whitelisted_ips
 
     def _block_ip(self, ip: str, reason: str, block_until: datetime):
+        """Block an IP address."""
+        # Avoid redundant blocking if already in local cache
+        if ip in self.blocked_ips and self.blocked_ips[ip] >= block_until:
+            return
+
+        self.blocked_ips[ip] = block_until
+
+        # Block at firewall level if enabled
+        if self.use_firewall and hasattr(self, '_iptables') and self._iptables:
+            try:
+                self._iptables.block_ip(ip, reason)
+            except Exception as e:
+                logger.error(f"Failed to block IP {ip} at firewall level: {e}")
+
+        # Block at Cloudflare level if enabled
+        if hasattr(self, '_cloudflare') and self._cloudflare:
+            try:
+                self._cloudflare.block_ip(ip, reason)
+            except Exception as e:
+                logger.error(f"Failed to block IP {ip} at Cloudflare level: {e}")
+
+        # Reset counters in DB after blocking
+        try:
+            reset_request_counters(ip)
+        except Exception as e:
+            logger.error(f"Failed to reset request counters in DB: {e}")
+
+    def check_request(
         self, ip: str, status: int, path: str, host: str = "", user_agent: str = "", country_code: Optional[str] = None
     ) -> Optional[str]:
         """Check if a request should trigger blocking using DB for shared state."""
