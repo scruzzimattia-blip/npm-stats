@@ -72,6 +72,27 @@ def main():
                 st.rerun()
 
         st.divider()
+        st.subheader("🔥 Firewall & System-Blocking")
+        with st.form("firewall_settings"):
+            use_fw = st.checkbox("iptables Firewall-Blocking Aktivieren", value=app_config.use_firewall,
+                                help="Sperrt IPs direkt auf Systemebene (benötigt Root/Sudo).")
+
+            c1, c2 = st.columns(2)
+            with c1:
+                use_doc = st.checkbox("Docker-Modus (DOCKER-USER Chain)", value=app_config.use_docker,
+                                     help="Nutze DOCKER-USER Chain statt INPUT (nötig wenn NPM im Container läuft).")
+            with c2:
+                parent_chain = st.text_input("Eigene Parent-Chain (optional)", value=app_config.iptables_parent_chain,
+                                           placeholder="Lassen für Standard (INPUT/DOCKER-USER)")
+
+            if st.form_submit_button("Firewall Speichern"):
+                update_setting("use_firewall", use_fw)
+                update_setting("use_docker", use_doc)
+                update_setting("iptables_parent_chain", parent_chain)
+                st.success("Firewall-Einstellungen gespeichert!")
+                st.rerun()
+
+        st.divider()
         st.subheader("⚖️ Sicherheits-Schwellwerte")
         st.info("Diese Werte bestimmen, wann eine IP automatisch gesperrt wird (innerhalb von 5 Min).")
         with st.form("security_settings"):
