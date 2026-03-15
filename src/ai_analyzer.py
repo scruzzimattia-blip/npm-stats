@@ -66,43 +66,50 @@ class AIAnalyzer:
                 json={
                     "model": self.model,
                     "messages": [
-                        {"role": "system", "content": "You are a senior security analyst. Analyze the provided Nginx logs for malicious behavior. Be concise and technical. Format your response in Markdown."},
+                        {"role": "system", "content": "Du bist ein Senior SOC Analyst. Antworte ausschließlich in validem JSON."},
                         {"role": "user", "content": prompt}
                     ],
-                    "response_format": { "type": "json_object" } if "gemini" not in self.model.lower() else None
+                    "response_format": { "type": "json_object" }
                 },
                 timeout=30
             )
             response.raise_for_status()
             data = response.json()
-            content = data["choices"][0]["message"]["content"]
+            raw_content = data["choices"][0]["message"]["content"]
             
-            # Simple heuristic for threat level (usually LLMs include this in text)
-            threat_level = "Unknown"
-            if "HIGH" in content.upper() or "GEFÄHRLICH" in content.upper() or "CRITICAL" in content.upper():
-                threat_level = "High"
-            elif "MEDIUM" in content.upper() or "WARNUNG" in content.upper():
-                threat_level = "Medium"
-            else:
-                threat_level = "Low"
+            # Parse JSON response
+            try:
+                # Remove possible markdown code blocks if the LLM adds them despite the system prompt
+                clean_json = raw_content.replace("```json", "").replace("```", "").strip()
+                res = json.loads(clean_json)
+                
+                content = res.get("markdown_report", raw_content)
+                threat_level = res.get("bedrohungslevel", "Unknown")
+                category = res.get("kategorie", "Unknown")
+                
+                full_report = f"### KI Analyse: {category}\n\n**Beurteilung:** {res.get('beurteilung')}\n**Begründung:** {res.get('begruendung')}\n\n{content}"
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse AI JSON response for {ip_address}. Falling back to raw text.")
+                full_report = raw_content
+                threat_level = "Unknown"
 
             # 4. Save to DB
-            add_ai_report(ip_address, content, threat_level, self.model)
+            add_ai_report(ip_address, full_report, threat_level, self.model)
             logger.info(f"AI analysis completed for {ip_address}. Threat Level: {threat_level}")
-            return {"report": content, "threat_level": threat_level}
+            return {"report": full_report, "threat_level": threat_level}
 
         except Exception as e:
             logger.error(f"AI analysis failed for {ip_address}: {e}")
             return None
 
     def _get_ip_context(self, ip_address: str) -> Dict[str, Any]:
-        """Fetch recent log history for the IP as context."""
+        """Fetch recent log history for the IP as context with GeoIP info."""
         query = """
-            SELECT time, host, method, path, status, user_agent, response_length
+            SELECT time, host, method, path, status, user_agent, response_length, country_code, city
             FROM traffic
             WHERE remote_addr = %s
             ORDER BY time DESC
-            LIMIT 50;
+            LIMIT 100;
         """
         import psycopg.rows as psycopg_rows
         with get_connection() as conn:
@@ -110,28 +117,52 @@ class AIAnalyzer:
                 cur.execute(query, (ip_address,))
                 logs = cur.fetchall()
                 
-        return {"logs": logs}
+        # Get blocking reason if available
+        reason = "Unbekannt"
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT reason FROM blocklist WHERE ip_address = %s LIMIT 1", (ip_address,))
+                    row = cur.fetchone()
+                    if row: reason = row[0]
+        except Exception:
+            pass
+
+        return {"logs": logs, "block_reason": reason}
 
     def _build_prompt(self, ip_address: str, context: Dict[str, Any]) -> str:
-        """Create a detailed prompt with log data."""
+        """Create a highly detailed security analysis prompt."""
         log_lines = []
+        country = "Unbekannt"
         for log in context["logs"]:
-            line = f"{log['time']} | {log['host']} | {log['method']} {log['path']} | {log['status']} | {log['user_agent']}"
+            if log.get("country_code"): country = f"{log['country_code']} ({log.get('city', 'Unbekannt')})"
+            line = f"[{log['time']}] {log['method']} {log['host']}{log['path']} -> {log['status']} (UA: {log['user_agent']})"
             log_lines.append(line)
             
         logs_str = "\n".join(log_lines)
         
-        return f"""Analyze the following traffic from IP address {ip_address}.
-Determine if this is a human, a harmless bot, or a malicious actor (scanners, exploit attempts, etc.).
+        return f"""Du bist ein Senior SOC Analyst. Analysiere das Verhalten der IP {ip_address} aus {country}.
+Die IP wurde gesperrt mit dem Grund: "{context.get('block_reason', 'Unbekannt')}".
 
-Recent Logs:
+Deine Aufgabe ist es, die Absicht des Akteurs zu bestimmen. Suche nach:
+1. Directory/File Bruteforce (viele 404s auf sensitive Pfade)
+2. Vulnerability Scanning (Suche nach .env, .git, /wp-admin, phpmyadmin)
+3. Exploitation Versuche (SQL-Injection, LFI/RFI Muster, Command Injection)
+4. Botnet-Verhalten (Automatisierte, repetitive Anfragen mit untypischen User-Agents)
+5. Harmloses Verhalten (Suchmaschinen-Crawler, Fehlkonfiguration des Nutzers)
+
+Letzte Logs:
 {logs_str}
 
-Please provide your analysis in Markdown format with the following sections:
-- **Beurteilung**: (Human/Harmless Bot/Malicious)
-- **Bedrohungslevel**: (Low/Medium/High/Critical)
-- **Details**: (Why did you reach this conclusion? What patterns did you see?)
-- **Empfehlung**: (What should I do? Permanent block, watch, etc.)
+ANTWORTE STRENG IM FOLGENDEN JSON-FORMAT (NUR DAS JSON!):
+{{
+  "beurteilung": "Mensch/Harmloser Bot/Bösartiger Akteur",
+  "bedrohungslevel": "Low/Medium/High/Critical",
+  "kategorie": "Bruteforce/SQLi/Scanner/Crawler/etc",
+  "begruendung": "Kurze technische Analyse der Muster",
+  "empfehlung": "Permanent blocken / Beobachten / Whitelisten",
+  "markdown_report": "Ein ausführlicher Bericht im Markdown-Format für das Dashboard"
+}}
 """
 
 def run_ai_loop() -> None:
