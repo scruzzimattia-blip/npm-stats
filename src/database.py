@@ -989,3 +989,114 @@ def get_audit_logs(limit: int = 100) -> List[Dict[str, Any]]:
         with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
             cur.execute(query, (limit,))
             return cur.fetchall()
+
+
+def get_protocol_distribution(
+    hosts: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+) -> pd.DataFrame:
+    """Get HTTP protocol distribution (http vs https)."""
+    conditions = []
+    params: List[Any] = []
+
+    if hosts:
+        conditions.append("host = ANY(%s)")
+        params.append(list(hosts))
+    if start_date:
+        conditions.append("time >= %s")
+        params.append(start_date)
+    if end_date:
+        conditions.append("time <= %s")
+        params.append(end_date)
+
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    query = f"""
+        SELECT 
+            COALESCE(protocol, 'unknown') as protocol,
+            COUNT(*) as request_count,
+            SUM(response_length) as total_bytes
+        FROM traffic
+        {where_clause}
+        GROUP BY protocol
+        ORDER BY request_count DESC;
+    """
+    with get_connection() as conn:
+        return pd.read_sql(query, conn, params=params)
+
+
+def get_status_distribution(
+    hosts: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+) -> pd.DataFrame:
+    """Get HTTP status code distribution."""
+    conditions = []
+    params: List[Any] = []
+
+    if hosts:
+        conditions.append("host = ANY(%s)")
+        params.append(list(hosts))
+    if start_date:
+        conditions.append("time >= %s")
+        params.append(start_date)
+    if end_date:
+        conditions.append("time <= %s")
+        params.append(end_date)
+
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    query = f"""
+        SELECT 
+            status,
+            CASE 
+                WHEN status < 200 THEN '1xx Informational'
+                WHEN status < 300 THEN '2xx Success'
+                WHEN status < 400 THEN '3xx Redirection'
+                WHEN status < 500 THEN '4xx Client Error'
+                ELSE '5xx Server Error'
+            END as category,
+            COUNT(*) as request_count
+        FROM traffic
+        {where_clause}
+        GROUP BY status
+        ORDER BY status;
+    """
+    with get_connection() as conn:
+        return pd.read_sql(query, conn, params=params)
+
+
+def get_method_distribution(
+    hosts: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+) -> pd.DataFrame:
+    """Get HTTP method distribution."""
+    conditions = []
+    params: List[Any] = []
+
+    if hosts:
+        conditions.append("host = ANY(%s)")
+        params.append(list(hosts))
+    if start_date:
+        conditions.append("time >= %s")
+        params.append(start_date)
+    if end_date:
+        conditions.append("time <= %s")
+        params.append(end_date)
+
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    query = f"""
+        SELECT 
+            method,
+            COUNT(*) as request_count,
+            SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as error_count
+        FROM traffic
+        {where_clause}
+        GROUP BY method
+        ORDER BY request_count DESC;
+    """
+    with get_connection() as conn:
+        return pd.read_sql(query, conn, params=params)

@@ -143,6 +143,71 @@ class IPBlocker:
         self._refresh_lists_if_needed()
         return ip in self.whitelisted_ips
 
+    def _is_verified_bot(self, ip: str, user_agent: str) -> bool:
+        """Check if request is from a verified good bot (Google, Bing, etc.)."""
+        if not user_agent:
+            return False
+
+        ua_lower = user_agent.lower()
+
+        # Known good bot patterns
+        verified_bots = [
+            "googlebot",
+            "google-inspectiontool",
+            "googleother",
+            "bingbot",
+            "bingpreview",
+            "msnbot",
+            "yandexbot",
+            "yandex.com/bots",
+            "duckduckbot",
+            "baiduspider",
+            "facebookexternalhit",
+            "twitterbot",
+            "applebot",
+            "slackbot",
+            "telegrambot",
+            "discordbot",
+            "whatsapp",
+            "safari/537.36",  # iOS Safari (often misidentified)
+        ]
+
+        # Check if UA contains any known good bot
+        for bot in verified_bots:
+            if bot in ua_lower:
+                # For Google and Bing, verify with RDNS
+                if "google" in bot:
+                    return self._verify_google_bot(ip)
+                elif "bing" in bot or "msn" in bot:
+                    return self._verify_bing_bot(ip)
+                return True
+
+        return False
+
+    def _verify_google_bot(self, ip: str) -> bool:
+        """Verify Google bot via RDNS lookup."""
+        import socket
+
+        try:
+            hostname, _, _ = socket.gethostbyaddr(ip)
+            if hostname.endswith(".googlebot.com") or hostname.endswith(".google.com"):
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _verify_bing_bot(self, ip: str) -> bool:
+        """Verify Bing bot via RDNS lookup."""
+        import socket
+
+        try:
+            hostname, _, _ = socket.gethostbyaddr(ip)
+            if hostname.endswith(".search.msn.com"):
+                return True
+        except Exception:
+            pass
+        return False
+
     def _block_ip(self, ip: str, reason: str, block_until: datetime):
         """Block an IP address."""
         # 3. Dry-Run Check
@@ -250,9 +315,12 @@ class IPBlocker:
                 self._block_ip(ip, reason, block_until)
                 return reason
 
-        # 0.2 Fake Bot Check (Reverse DNS)
+        # 0.2 Fake Bot Check (Reverse DNS) or Verified Bot Whitelist
         if "bot" in user_agent.lower() or "google" in user_agent.lower() or "bing" in user_agent.lower():
-            if not self._is_verified_bot(ip, user_agent):
+            if self._is_verified_bot(ip, user_agent):
+                # Verified good bot - skip all blocking checks
+                return None
+            else:
                 reason = f"Fake Bot erkannt (User-Agent Spoofing): {user_agent}"
                 # 7-day block for fake bots
                 block_until = datetime.now(timezone.utc) + timedelta(days=7)
@@ -260,7 +328,7 @@ class IPBlocker:
                 logger.warning(f"SPOOFING DETECTED: IP {ip} claims to be {user_agent}")
                 return reason
 
-        # 0.3 Context & ASN Multiplier
+        # 0.3 Context & ASN Multiplier - stricter limits for suspicious sources
         multiplier = 1.0
         if self._is_sensitive_path(path):
             multiplier *= 3.0  # Errors on sensitive paths are much worse
@@ -385,7 +453,7 @@ class IPBlocker:
 
         combined_input = (path + " " + user_agent).lower()
 
-        # 1. SQLi heuristic
+        # 1. SQLi heuristic - Extended patterns
         sqli_patterns = [
             "union select",
             "union all select",
@@ -397,16 +465,53 @@ class IPBlocker:
             "syscolumns",
             "waitfor delay",
             "pg_sleep(",
+            "1=1",
+            "1' or '1'='1",
+            '1" or "1"="1',
+            "or 1=1",
+            "and 1=1",
+            "drop table",
+            "drop database",
+            "insert into",
+            "delete from",
+            "update set",
+            "exec(",
+            "execute(",
+            "sleep(",
+            "benchmark(",
+            "into outfile",
+            "load_file",
+            "concat(",
         ]
         if any(pattern in combined_input for pattern in sqli_patterns):
             return "SQL-Injection Versuch (WAF Heuristik)"
 
-        # 2. XSS heuristic
-        xss_patterns = ["<script", "%3cscript", "javascript:", "onerror=", "onload=", "alert("]
+        # 2. XSS heuristic - Extended patterns
+        xss_patterns = [
+            "<script",
+            "%3cscript",
+            "javascript:",
+            "onerror=",
+            "onload=",
+            "alert(",
+            "onmouseover=",
+            "onfocus=",
+            "onblur=",
+            "eval(",
+            "document.cookie",
+            "document.location",
+            "window.location",
+            "<img src=",
+            "<iframe",
+            "<embed",
+            "<object",
+            "svg/onload=",
+            "body/onload=",
+        ]
         if any(pattern in combined_input for pattern in xss_patterns):
             return "XSS Versuch (WAF Heuristik)"
 
-        # 3. Path Traversal & LFI
+        # 3. Path Traversal & LFI - Extended patterns
         traversal_patterns = [
             "../",
             "..\\",
@@ -418,11 +523,25 @@ class IPBlocker:
             "/proc/self",
             "file_get_contents",
             "include(",
+            "require(",
+            "php://input",
+            "data://text",
+            "expect://",
+            "phar://",
+            "../../../",
+            "..%2f..%2f",
+            "%2e%2e/",
+            "/.git/config",
+            "/.svn/entries",
+            "/wp-content/",
+            "/wp-includes/",
+            "c:\\boot.ini",
+            "\\\\windows\\\\system32",
         ]
         if any(pattern in combined_input for pattern in traversal_patterns):
             return "Path Traversal / LFI Versuch (WAF Heuristik)"
 
-        # 4. Modern Threats & Exploits
+        # 4. Modern Threats & Exploits - Extended
         modern_exploits = {
             "${jndi:ldap": "Log4Shell Exploit Versuch (CVE-2021-44228)",
             "${jndi:dns": "Log4Shell Exploit Versuch (CVE-2021-44228)",
@@ -431,12 +550,24 @@ class IPBlocker:
             "() { :; };": "Shellshock Exploit Versuch (CVE-2014-6271)",
             ".aws/credentials": "Cloud Credential Theft Versuch",
             ".ssh/id_rsa": "SSH Key Theft Versuch",
+            "/.env": "Env File Access Versuch",
+            "/config.json": "Config File Access Versuch",
+            "/database.sql": "Database Dump Access Versuch",
+            "wp-config.php": "WordPress Config Access",
+            "/admin.php": "Admin Panel Scan",
+            "/phpmyadmin": "phpMyAdmin Access Versuch",
+            "/xmlrpc.php": "WordPress XMLRPC Attack",
+            "/wp-login.php": "WordPress Login Scan",
+            "/api/v1/": "API Endpoint Scan",
+            "/actuator/": "Spring Boot Actuator Scan",
+            "/eureka/": "Spring Cloud Eureka Scan",
+            "/health": "Kubernetes Health Probe Scan",
         }
         for pattern, reason in modern_exploits.items():
             if pattern in combined_input:
                 return reason
 
-        # 5. Command Injection
+        # 5. Command Injection - Extended
         cmd_patterns = [
             "; curl ",
             "; wget ",
@@ -446,7 +577,23 @@ class IPBlocker:
             "| curl ",
             "| wget ",
             "| chmod ",
+            "| nc ",
+            "| bash ",
+            "| sh ",
             "`curl ",
+            "`wget ",
+            "$(curl ",
+            "$(wget ",
+            "&& curl ",
+            "|| curl ",
+            "; cat /etc/",
+            "| cat /etc/",
+            "wget http",
+            "curl http",
+            "lynx http",
+            "nc -e ",
+            "/bin/sh",
+            "/bin/bash",
             "`wget ",
         ]
         if any(pattern in combined_input for pattern in cmd_patterns):

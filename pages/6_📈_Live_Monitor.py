@@ -9,6 +9,9 @@ from src.ui_utils import init_page, render_common_sidebar
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8002")
 
+# Auto-refresh every 30 seconds
+init_page("Live Monitor", "📈", auto_refresh=30)
+
 
 def fetch_recent_traffic():
     """Fetch recent traffic from our new API."""

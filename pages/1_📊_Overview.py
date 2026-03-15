@@ -32,7 +32,9 @@ def main():
 
     handle_sync_button()
 
-    selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query, selected_status = render_common_sidebar()
+    selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query, selected_status = (
+        render_common_sidebar()
+    )
 
     if not selected_hosts:
         st.warning("Bitte wähle mindestens eine Domain aus.")
@@ -52,13 +54,10 @@ def main():
     metrics = _cached_traffic_metrics(hosts=selected_hosts, start_date=start_date, end_date=end_date)
 
     if metrics["total_requests"] == 0:
-        st.info("Keine Daten für den gewählten Zeitraum gefunden. Klicke oben rechts auf 🔄 Sync, um aktuelle Logs einzulesen.")
-    df = load_traffic_data(
-        hosts=selected_hosts,
-        start_date=start_date,
-        end_date=end_date,
-        limit=1000
-    )
+        st.info(
+            "Keine Daten für den gewählten Zeitraum gefunden. Klicke oben rechts auf 🔄 Sync, um aktuelle Logs einzulesen."
+        )
+    df = load_traffic_data(hosts=selected_hosts, start_date=start_date, end_date=end_date, limit=1000)
 
     # PDF Export in Sidebar
     st.sidebar.subheader("Export")
@@ -70,7 +69,7 @@ def main():
                 data=pdf_data,
                 file_name=f"npm_monitor_report_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M')}.pdf",
                 mime="application/pdf",
-                use_container_width=True
+                use_container_width=True,
             )
 
     render_metrics(metrics)
@@ -96,8 +95,12 @@ def main():
                     y="attack_count",
                     color="unique_attackers",
                     title="Top angegriffene Hosts (Fehlerrate >= 400)",
-                    labels={"attack_count": "Anzahl Angriffsversuche", "host": "Ziel-Host", "unique_attackers": "Eindeutige Angreifer"},
-                    color_continuous_scale="Reds"
+                    labels={
+                        "attack_count": "Anzahl Angriffsversuche",
+                        "host": "Ziel-Host",
+                        "unique_attackers": "Eindeutige Angreifer",
+                    },
+                    color_continuous_scale="Reds",
                 )
                 st.plotly_chart(fig, use_container_width=True)
             with col_a2:
@@ -105,6 +108,58 @@ def main():
                 st.dataframe(attack_stats, hide_index=True, use_container_width=True)
         else:
             st.info("Keine Angriffsdaten für die aktuelle Auswahl verfügbar.")
+
+        # Traffic Analysis Charts
+        st.subheader("📈 Traffic Analyse")
+
+        from src.database import get_protocol_distribution, get_status_distribution, get_method_distribution
+
+        col_t1, col_t2 = st.columns(2)
+
+        with col_t1:
+            protocol_df = get_protocol_distribution(hosts=selected_hosts, start_date=start_date, end_date=end_date)
+            if not protocol_df.empty:
+                fig_proto = px.pie(
+                    protocol_df,
+                    values="request_count",
+                    names="protocol",
+                    title="Protocol Distribution (HTTP vs HTTPS)",
+                    color="protocol",
+                    color_discrete_map={"https": "green", "http": "orange"},
+                )
+                st.plotly_chart(fig_proto, use_container_width=True)
+
+        with col_t2:
+            method_df = get_method_distribution(hosts=selected_hosts, start_date=start_date, end_date=end_date)
+            if not method_df.empty:
+                fig_method = px.bar(
+                    method_df,
+                    x="method",
+                    y="request_count",
+                    title="HTTP Method Distribution",
+                    color="request_count",
+                    color_continuous_scale="Viridis",
+                )
+                st.plotly_chart(fig_method, use_container_width=True)
+
+        # Status Code Distribution
+        status_df = get_status_distribution(hosts=selected_hosts, start_date=start_date, end_date=end_date)
+        if not status_df.empty:
+            fig_status = px.bar(
+                status_df,
+                x="status",
+                y="request_count",
+                color="category",
+                title="HTTP Status Code Distribution",
+                color_discrete_map={
+                    "2xx Success": "green",
+                    "3xx Redirection": "yellow",
+                    "4xx Client Error": "orange",
+                    "5xx Server Error": "red",
+                    "1xx Informational": "blue",
+                },
+            )
+            st.plotly_chart(fig_status, use_container_width=True)
 
         render_top_ips(df, top_ips_summary)
         render_error_paths(df)
@@ -129,11 +184,7 @@ def main():
             if "country_code" in display_df.columns:
                 cols_to_show.append("country_code")
 
-            st.dataframe(
-                display_df[cols_to_show],
-                use_container_width=True,
-                hide_index=True
-            )
+            st.dataframe(display_df[cols_to_show], use_container_width=True, hide_index=True)
         else:
             st.info("Keine Live-Logs verfügbar.")
 
@@ -146,6 +197,7 @@ def main():
 
         if st.button("✨ Bericht generieren", use_container_width=True):
             from src.utils.briefings import SecurityBriefing
+
             briefing = SecurityBriefing()
             with st.spinner("KI analysiert Daten..."):
                 report = briefing.generate_daily_summary()
@@ -158,6 +210,6 @@ def main():
     with tab4:
         render_npm_hosts_status()
 
+
 if __name__ == "__main__":
     main()
-

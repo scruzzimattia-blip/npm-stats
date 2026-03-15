@@ -5,7 +5,8 @@ from src.ui_utils import handle_sync_button, init_page, render_common_sidebar
 
 
 def main():
-    init_page("Security", "🚫")
+    # Auto-refresh every 60 seconds for blocking page
+    init_page("Security", "🚫", auto_refresh=60)
     st.title("🚫 Blocking & Sicherheit")
 
     handle_sync_button()
@@ -21,6 +22,7 @@ def main():
 
     with tab2:
         render_blocking_config()
+
 
 if __name__ == "__main__":
     main()

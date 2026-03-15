@@ -27,8 +27,14 @@ from .utils import setup_logging
 logger = logging.getLogger(__name__)
 
 
-def init_page(title: str, icon: str = "🌐"):
-    """Initialize a Streamlit page with standard config and health check."""
+def init_page(title: str, icon: str = "🌐", auto_refresh: int = 0):
+    """Initialize a Streamlit page with standard config and health check.
+
+    Args:
+        title: Page title
+        icon: Page icon
+        auto_refresh: Auto-refresh interval in seconds (0 = disabled)
+    """
     st.set_page_config(
         page_title=f"NPM Monitor - {title}",
         page_icon=icon,
@@ -43,6 +49,22 @@ def init_page(title: str, icon: str = "🌐"):
     if not health_check():
         st.error("Datenbankverbindung fehlgeschlagen!")
         st.stop()
+
+    # Auto-refresh using Streamlit's rerun mechanism
+    if auto_refresh > 0:
+        import streamlit.components.v1 as components
+
+        components.html(
+            f"""
+            <script>
+                function autoRefresh() {{
+                    window.location.reload();
+                }}
+                setTimeout(autoRefresh, {auto_refresh * 1000});
+            </script>
+            """,
+            height=0,
+        )
 
 
 def sync_logs() -> int:
@@ -68,11 +90,7 @@ def load_traffic_data(
 ):
     """Cached traffic data loading with explicit parameters for better caching."""
     return load_traffic_df(
-        hosts=list(hosts) if hosts else None,
-        start_date=start_date,
-        end_date=end_date,
-        limit=limit,
-        offset=offset
+        hosts=list(hosts) if hosts else None, start_date=start_date, end_date=end_date, limit=limit, offset=offset
     )
 
 
@@ -93,11 +111,13 @@ def _cached_geo_summary(
     end_date: Optional[datetime] = None,
 ):
     from .database import get_geo_summary
+
     return get_geo_summary(
         hosts=list(hosts) if hosts else None,
         start_date=start_date,
         end_date=end_date,
     )
+
 
 @st.cache_data(ttl=600)
 def _cached_hourly_summary(
@@ -120,10 +140,7 @@ def _cached_top_ips(
     limit: int = 100,
 ):
     return get_top_ips_summary(
-        hosts=list(hosts) if hosts else None,
-        start_date=start_date,
-        end_date=end_date,
-        limit=limit
+        hosts=list(hosts) if hosts else None, start_date=start_date, end_date=end_date, limit=limit
     )
 
 
@@ -134,6 +151,7 @@ def _cached_traffic_metrics(
     end_date: Optional[datetime] = None,
 ):
     from .database import get_traffic_metrics
+
     return get_traffic_metrics(
         hosts=list(hosts) if hosts else None,
         start_date=start_date,
@@ -146,12 +164,14 @@ def render_common_sidebar():
     from streamlit_autorefresh import st_autorefresh
 
     # Get all sidebar values
-    selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query, selected_status = render_sidebar(
-        cached_hosts=_cached_hosts,
-        cached_db_info=_cached_db_info,
-        get_newest_timestamp=get_newest_timestamp,
-        sync_logs_callback=sync_logs,
-        cleanup_old_data_callback=cleanup_old_data,
+    selected_hosts, start_date, end_date, auto_refresh, refresh_interval, search_query, selected_status = (
+        render_sidebar(
+            cached_hosts=_cached_hosts,
+            cached_db_info=_cached_db_info,
+            get_newest_timestamp=get_newest_timestamp,
+            sync_logs_callback=sync_logs,
+            cleanup_old_data_callback=cleanup_old_data,
+        )
     )
 
     # Global Auto-Refresh implementation
