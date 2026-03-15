@@ -838,9 +838,13 @@ def get_database_info() -> Dict[str, Any]:
                 cur.execute("SELECT COUNT(*) FROM blocklist WHERE unblocked_at IS NULL AND block_until > NOW();")
                 info["blocked_count"] = cur.fetchone()[0]
 
-                # Table size (traffic only, as it's the main data)
-                cur.execute("SELECT pg_size_pretty(pg_total_relation_size('traffic'));")
-                info["table_size"] = cur.fetchone()[0]
+                # Table size (including partitions for partitioned tables)
+                cur.execute("""
+                    SELECT pg_size_pretty(SUM(pg_total_relation_size(relid)))
+                    FROM pg_partition_tree('traffic');
+                """)
+                res_size = cur.fetchone()
+                info["table_size"] = res_size[0] if res_size and res_size[0] else "0 B"
 
                 # Timestamps
                 cur.execute("SELECT MIN(time), MAX(time) FROM traffic;")
