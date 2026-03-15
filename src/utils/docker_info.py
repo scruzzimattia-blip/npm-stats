@@ -11,42 +11,30 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-def get_docker_client():
-    """Create a Docker client if available."""
+def get_container_status() -> tuple[List[Dict[str, Any]], Optional[str]]:
+    """Fetch status and basic stats for relevant containers. Returns (data, error_message)."""
     if docker is None:
-        logger.error("Docker library not installed.")
-        return None
-    
+        return [], "Python-Bibliothek 'docker' ist nicht installiert. Bitte uv.lock aktualisieren."
+
     try:
         # Check if socket exists
         socket_path = "/var/run/docker.sock"
         if not os.path.exists(socket_path):
-            logger.debug(f"Docker socket {socket_path} not found.")
-            return None
+            return [], f"Docker-Socket nicht gefunden unter {socket_path}. Ist der Mount im docker-compose korrekt?"
             
         # Connect via explicit unix socket path
         client = docker.DockerClient(base_url=f"unix://{socket_path}")
         # Test connection
         client.ping()
-        return client
     except Exception as e:
-        logger.warning(f"Docker connection failed (check permissions): {e}")
-        return None
-
-def get_container_status() -> List[Dict[str, Any]]:
-    """Fetch status and basic stats for relevant containers."""
-    client = get_docker_client()
-    if not client:
-        return []
+        return [], f"Verbindung zum Docker-Socket fehlgeschlagen: {e}. Läuft der Container als root?"
 
     containers_info = []
     try:
-        # List all containers (or filter if needed)
+        # List all containers
         containers = client.containers.list(all=True)
         
         for c in containers:
-            # We focus on NPM related or all active containers
-            # Get stats (non-blocking)
             try:
                 # Basic info
                 info = {
@@ -64,7 +52,7 @@ def get_container_status() -> List[Dict[str, Any]]:
             except Exception:
                 continue
                 
-        return sorted(containers_info, key=lambda x: x['name'])
+        return sorted(containers_info, key=lambda x: x['name']), None
     except Exception as e:
         logger.error(f"Error fetching Docker containers: {e}")
-        return []
+        return [], str(e)

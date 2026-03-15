@@ -118,8 +118,12 @@ def main():
         
         st.divider()
         st.subheader("📦 Backend Services Status (Docker)")
-        containers = get_container_status()
-        if containers:
+        containers, docker_error = get_container_status()
+        
+        if docker_error:
+            st.error(f"🐳 Docker-Fehler: {docker_error}")
+            st.info("Tipp: Führe `docker-compose build --no-cache npm-ui && docker-compose up -d npm-ui` aus, um Änderungen anzuwenden.")
+        elif containers:
             # Map status to icons
             for c in containers:
                 if c["status"] == "running":
@@ -147,7 +151,7 @@ def main():
                 hide_index=True
             )
         else:
-            st.info("Keine Docker-Informationen verfügbar. Stelle sicher, dass '/var/run/docker.sock' gemountet ist.")
+            st.info("Keine laufenden Docker-Container gefunden.")
 
 if __name__ == "__main__":
     main()
