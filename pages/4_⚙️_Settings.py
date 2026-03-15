@@ -107,6 +107,15 @@ def main():
                 max_rate = st.number_input("Rate-Limit (Requests/Min)", value=app_config.max_requests_per_minute)
                 block_dur = st.number_input("Sperrdauer (Sekunden)", value=app_config.block_duration, step=60)
 
+            st.write("**Intelligente Abwehr**")
+            c_adv1, c_adv2 = st.columns(2)
+            with c_adv1:
+                adaptive = st.checkbox("Adaptive Sperrdauer", value=app_config.enable_adaptive_blocking,
+                                      help="Verlängert die Sperre für Wiederholungstäter exponentiell (1h -> 1 Tag -> 1 Woche -> 1 Jahr).")
+            with c_adv2:
+                dry_run = st.checkbox("WAF Dry-Run Modus", value=app_config.waf_dry_run,
+                                     help="Loggt Angriffe nur, sperrt die IPs aber nicht real. Ideal zum Testen.")
+
             suspicious_paths = st.text_area(
                 "Verdächtige Pfade (kommagetrennt)",
                 value=",".join(app_config.suspicious_paths),
@@ -135,6 +144,8 @@ def main():
                 update_setting("max_suspicious_paths", max_suspicious)
                 update_setting("max_requests_per_minute", max_rate)
                 update_setting("block_duration", block_dur)
+                update_setting("enable_adaptive_blocking", adaptive)
+                update_setting("waf_dry_run", dry_run)
                 update_setting("suspicious_paths", suspicious_paths)
                 update_setting("sensitive_paths", sensitive_paths)
                 update_setting("honey_paths", honey_paths)

@@ -61,6 +61,9 @@ def send_ntfy_notification(title: str, message: str, priority: str = "default"):
 
 def send_test_notification() -> bool:
     """Send a test notification through all configured channels."""
+    # Force settings reload to ensure we are testing the latest config
+    app_config.load_dynamic_settings(force=True)
+
     test_ip = "1.2.3.4 (TEST)"
     test_reason = "Dies ist eine Test-Benachrichtigung vom NPM Traffic Monitor."
     test_until = datetime.now(timezone.utc) + __import__("datetime").timedelta(hours=1)

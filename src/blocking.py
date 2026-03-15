@@ -9,6 +9,7 @@ from .database import (
     cleanup_trackers,
     get_asn_blocklist,
     get_blocked_ips,
+    get_ip_block_count,
     get_tracked_ip_count,
     get_whitelist,
     reset_request_counters,
@@ -144,6 +145,11 @@ class IPBlocker:
 
     def _block_ip(self, ip: str, reason: str, block_until: datetime):
         """Block an IP address."""
+        # 3. Dry-Run Check
+        if app_config.waf_dry_run:
+            logger.info(f"[DRY-RUN] Would block IP {ip} until {block_until}. Reason: {reason}")
+            return
+
         # Avoid redundant blocking if already in local cache
         if ip in self.blocked_ips and self.blocked_ips[ip] >= block_until:
             return
@@ -170,6 +176,27 @@ class IPBlocker:
         except Exception as e:
             logger.error(f"Failed to reset request counters in DB: {e}")
 
+    def _get_adaptive_duration(self, ip: str) -> int:
+        """Calculate adaptive block duration based on previous blocks."""
+        base_duration = app_config.block_duration
+        if not app_config.enable_adaptive_blocking:
+            return base_duration
+
+        # Get number of previous blocks from DB
+        try:
+            previous_blocks = get_ip_block_count(ip)
+
+            if previous_blocks <= 1:
+                return base_duration
+            elif previous_blocks == 2:
+                return 86400  # 1 day
+            elif previous_blocks == 3:
+                return 604800  # 1 week
+            else:
+                return 31536000  # 1 year (permanent-ish)
+        except Exception:
+            return base_duration
+
     def check_request(
         self, ip: str, status: int, path: str, host: str = "", user_agent: str = "", country_code: Optional[str] = None
     ) -> Optional[str]:
@@ -190,7 +217,7 @@ class IPBlocker:
             decision = self._crowdsec.get_ip_reputation(ip)
             if decision:
                 reason = f"CrowdSec Reputations-Sperre: {decision.get('type', 'Banned')}"
-                # 24h block for CrowdSec listed IPs
+                # Adaptive 24h block for CrowdSec listed IPs
                 block_until = datetime.now(timezone.utc) + timedelta(days=1)
                 self._block_ip(ip, reason, block_until)
                 logger.warning(f"CROWDSEC BLOCK for IP {ip}: {reason}")
@@ -236,7 +263,9 @@ class IPBlocker:
         # WAF: User-Agent Check
         if self._is_malicious_user_agent(user_agent):
             reason = f"Bösartiger User-Agent erkannt: {user_agent}"
-            block_until = datetime.now(timezone.utc) + timedelta(seconds=app_config.block_duration * 24)
+            # Use adaptive duration
+            duration = self._get_adaptive_duration(ip)
+            block_until = datetime.now(timezone.utc) + timedelta(seconds=duration)
             self._block_ip(ip, reason, block_until)
             logger.warning(f"INSTANT BLOCK (WAF) for IP {ip}: {reason}")
             send_notification(ip, reason, block_until)
@@ -245,7 +274,8 @@ class IPBlocker:
         # WAF: Pattern Check (Task 3: Modern threats)
         waf_reason = self._check_waf_rules(path, user_agent)
         if waf_reason:
-            block_until = datetime.now(timezone.utc) + timedelta(seconds=app_config.block_duration * 24)
+            duration = self._get_adaptive_duration(ip)
+            block_until = datetime.now(timezone.utc) + timedelta(seconds=duration)
             self._block_ip(ip, waf_reason, block_until)
             logger.warning(f"INSTANT BLOCK (WAF) for IP {ip}: {waf_reason}")
             send_notification(ip, waf_reason, block_until)
@@ -302,9 +332,10 @@ class IPBlocker:
                     reason = "Bösartige IP in CrowdSec Datenbank gefunden"
 
         if reason:
-            block_until = datetime.now(timezone.utc) + timedelta(seconds=app_config.block_duration)
+            duration = self._get_adaptive_duration(ip)
+            block_until = datetime.now(timezone.utc) + timedelta(seconds=duration)
             self._block_ip(ip, reason, block_until)
-            logger.warning(f"Blocking IP {ip}: {reason}")
+            logger.warning(f"Blocking IP {ip}: {reason} (Duration: {duration}s)")
 
             # Send notification
             send_notification(ip, reason, block_until)

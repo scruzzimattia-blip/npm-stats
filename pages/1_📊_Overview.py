@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+import plotly.express as px
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
@@ -12,7 +13,7 @@ from src.components import (
     render_top_ips,
 )
 from src.config import app_config
-from src.database import get_latest_logs, get_traffic_spike_metrics
+from src.database import get_attack_surface_stats, get_latest_logs, get_traffic_spike_metrics
 from src.ui_utils import (
     _cached_hourly_summary,
     _cached_top_ips,
@@ -82,6 +83,29 @@ def main():
 
     with tab1:
         render_charts(df, hourly_summary)
+
+        # New Attack Surface Analytics
+        st.subheader("🎯 Attack Surface Analytics")
+        attack_stats = get_attack_surface_stats(limit=10)
+        if not attack_stats.empty:
+            col_a1, col_a2 = st.columns([2, 1])
+            with col_a1:
+                fig = px.bar(
+                    attack_stats,
+                    x="host",
+                    y="attack_count",
+                    color="unique_attackers",
+                    title="Top angegriffene Hosts (Fehlerrate >= 400)",
+                    labels={"attack_count": "Anzahl Angriffsversuche", "host": "Ziel-Host", "unique_attackers": "Eindeutige Angreifer"},
+                    color_continuous_scale="Reds"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            with col_a2:
+                st.write("Detaillierte Host-Statistik")
+                st.dataframe(attack_stats, hide_index=True, use_container_width=True)
+        else:
+            st.info("Keine Angriffsdaten für die aktuelle Auswahl verfügbar.")
+
         render_top_ips(df, top_ips_summary)
         render_error_paths(df)
         render_request_log(df)
@@ -136,3 +160,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -115,6 +115,11 @@ class AppConfig:
     enable_cloudflare: bool = field(default_factory=lambda: os.getenv("ENABLE_CLOUDFLARE", "false").lower() == "true")
     cloudflare_api_token: str = field(default_factory=lambda: os.getenv("CLOUDFLARE_API_TOKEN", ""))
     cloudflare_zone_id: str = field(default_factory=lambda: os.getenv("CLOUDFLARE_ZONE_ID", ""))
+
+    # Advanced Security Features
+    waf_dry_run: bool = field(default_factory=lambda: os.getenv("WAF_DRY_RUN", "false").lower() == "true")
+    enable_adaptive_blocking: bool = field(default_factory=lambda: os.getenv("ENABLE_ADAPTIVE_BLOCKING", "true").lower() == "true")
+
     # Anomaly detection
     enable_anomaly_detection: bool = field(
         default_factory=lambda: os.getenv("ENABLE_ANOMALY_DETECTION", "true").lower() == "true"

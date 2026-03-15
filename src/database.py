@@ -688,22 +688,33 @@ def get_geo_summary(
 
 # Blocklist operations
 def add_blocked_ip(ip_address: str, reason: str, block_until: datetime, is_manual: bool = False) -> bool:
-    """Add an IP address to the blocklist."""
+    """Add an IP address to the blocklist. Increments block_count on conflict."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO blocklist (ip_address, reason, block_until, is_manual)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO blocklist (ip_address, reason, block_until, is_manual, block_count)
+                VALUES (%s, %s, %s, %s, 1)
                 ON CONFLICT (ip_address) DO UPDATE
                 SET reason = EXCLUDED.reason,
                     block_until = EXCLUDED.block_until,
                     is_manual = EXCLUDED.is_manual,
-                    unblocked_at = NULL;
+                    unblocked_at = NULL,
+                    block_count = blocklist.block_count + 1;
                 """,
                 (ip_address, reason, block_until, is_manual),
             )
             return True
+
+
+def get_ip_block_count(ip_address: str) -> int:
+    """Get the number of times an IP has been blocked."""
+    query = "SELECT block_count FROM blocklist WHERE ip_address = %s;"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (ip_address,))
+            row = cur.fetchone()
+            return row[0] if row else 0
 
 
 def remove_blocked_ip(ip_address: str) -> bool:
@@ -928,6 +939,27 @@ def update_setting(key: str, value: Any) -> bool:
                 (key, str(value)),
             )
             return True
+
+
+def get_attack_surface_stats(limit: int = 10) -> pd.DataFrame:
+    """Get statistics on which hosts are targeted by most 'attacks' (errors/suspicious paths)."""
+    query = """
+        SELECT
+            host,
+            COUNT(*) as total_requests,
+            SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as attack_count,
+            COUNT(DISTINCT remote_addr) as unique_attackers
+        FROM traffic
+        WHERE status >= 400
+        GROUP BY host
+        ORDER BY attack_count DESC
+        LIMIT %s;
+    """
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            cur.execute(query, (limit,))
+            rows = cur.fetchall()
+            return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
 def add_audit_log(username: str, action: str, target: str, details: str = ""):
