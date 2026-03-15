@@ -40,12 +40,11 @@ def test_parse_log_line_ipv6():
 
 
 def test_parse_log_line_with_cloudflare_ip():
-    """Test that Cloudflare IPs are not ignored by default."""
+    """Test that Cloudflare IPs are ignored (filtered out)."""
     line = '[12/Oct/2023:14:32:10 +0000] - 200 200 - GET https example.com "/api/data" [Client 173.245.48.1] [Length 1024] [Gzip -] [Sent-to -] "Mozilla/5.0" "-"'
     parsed = parse_log_line(line)
-    # Cloudflare IPs should be parsed but can be filtered separately
-    assert parsed is not None
-    assert parsed["remote_addr"] == "173.245.48.1"
+    # Cloudflare IPs are filtered by should_ignore_ip
+    assert parsed is None
 
 
 def test_should_ignore_ipv6():
