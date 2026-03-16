@@ -24,7 +24,7 @@ class IptablesManager:
         # 1. Check if command exists at all
         try:
             result = subprocess.run(["iptables", "--version"], capture_output=True, text=True, timeout=2)
-            self.available = (result.returncode == 0)
+            self.available = result.returncode == 0
         except (subprocess.SubprocessError, FileNotFoundError):
             self.available = False
 
@@ -41,6 +41,7 @@ class IptablesManager:
             self.parent_chain = "DOCKER-USER"
         else:
             self.parent_chain = "INPUT"
+
     def _run_iptables(self, args: List[str]) -> subprocess.CompletedProcess:
         """Run iptables command with optional sudo."""
         cmd = ["sudo", "iptables"] + args if self.use_sudo else ["iptables"] + args
@@ -62,12 +63,7 @@ class IptablesManager:
 
         try:
             # Try to list rules
-            result = subprocess.run(
-                ["iptables", "-L", "-n"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+            result = subprocess.run(["iptables", "-L", "-n"], capture_output=True, text=True, timeout=5)
             return result.returncode == 0
         except (subprocess.SubprocessError, FileNotFoundError):
             return False
@@ -109,13 +105,7 @@ class IptablesManager:
         try:
             comment = f"{self.COMMENT_PREFIX}: {reason}"[:255] if reason else self.COMMENT_PREFIX
 
-            self._run_iptables([
-                "-A", self.CHAIN_NAME,
-                "-s", ip,
-                "-j", "DROP",
-                "-m", "comment",
-                "--comment", comment
-            ])
+            self._run_iptables(["-A", self.CHAIN_NAME, "-s", ip, "-j", "DROP", "-m", "comment", "--comment", comment])
 
             logger.info(f"Blocked IP {ip} at firewall level ({self.parent_chain}): {reason}")
             return True
@@ -130,16 +120,16 @@ class IptablesManager:
             return False
 
         try:
-            # We use line numbers to delete because matching rules with comments via -D 
+            # We use line numbers to delete because matching rules with comments via -D
             # can be very brittle if the comment isn't exactly the same.
-            
+
             deleted_any = False
             while True:
                 # 1. Find the line numbers for this IP in our chain
                 result = self._run_iptables(["-L", self.CHAIN_NAME, "-n", "--line-numbers"])
                 if result.returncode != 0:
                     break
-                
+
                 # Look for the line number. We parse the output of iptables -L -n --line-numbers
                 # Example line: "1    DROP       0    --  1.2.3.4              0.0.0.0/0"
                 line_to_delete = None
@@ -149,10 +139,10 @@ class IptablesManager:
                         if len(parts) > 0 and parts[0].isdigit():
                             line_to_delete = parts[0]
                             break
-                
+
                 if not line_to_delete:
                     break
-                
+
                 # 2. Delete the rule by line number
                 del_result = self._run_iptables(["-D", self.CHAIN_NAME, line_to_delete])
                 if del_result.returncode == 0:
@@ -161,7 +151,7 @@ class IptablesManager:
                     # If we can't delete by number for some reason, stop to avoid infinite loop
                     logger.error(f"Failed to delete iptables rule line {line_to_delete} for {ip}")
                     break
-            
+
             if deleted_any:
                 logger.info(f"Unblocked IP {ip} at firewall level (removed all instances)")
             return True
