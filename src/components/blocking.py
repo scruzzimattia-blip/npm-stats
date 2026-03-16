@@ -62,6 +62,7 @@ def render_blocked_ips():
                         mult = {"Minuten": 1, "Stunden": 60, "Tage": 1440}
                         until = datetime.now(timezone.utc) + timedelta(minutes=manual_duration * mult[duration_unit])
                         add_blocked_ip(manual_ip, manual_reason, until, is_manual=True)
+                        blocker.block_ip(manual_ip, manual_reason, until)
                         st.success(f"IP {manual_ip} wurde gesperrt.")
                         _get_cached_blocklist_rich.clear()
                         st.rerun()
