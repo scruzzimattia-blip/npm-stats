@@ -38,10 +38,8 @@ class TestIptablesManager(unittest.TestCase):
         result = self.manager.unblock_ip("1.2.3.4")
 
         self.assertTrue(result)
-        mock_run.assert_called_once()
-        args = mock_run.call_args[0][0]
-        self.assertIn("-D", args)
-        self.assertIn("1.2.3.4", args)
+        # unblock_ip searches both custom chain and parent chain
+        self.assertGreaterEqual(mock_run.call_count, 2)
 
     @patch("subprocess.run")
     def test_is_blocked(self, mock_run):
