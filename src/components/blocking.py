@@ -13,6 +13,7 @@ from ..database import (
     add_blocked_ip,
     add_to_whitelist,
     get_asn_blocklist,
+    get_blocked_ips_history,
     get_blocklist_with_ai_status,
     get_whitelist,
     remove_asn_block,
@@ -207,6 +208,42 @@ def render_blocked_ips():
                 st.info("Keine Ausnahmen definiert.")
         except Exception as e:
             st.error(f"Fehler: {e}")
+
+    # 7. History Section
+    st.divider()
+    st.subheader("📜 Sperr-Historie")
+
+    try:
+        history = get_blocked_ips_history(limit=100)
+        if history:
+            hist_data = []
+            for r in history:
+                hours = r.get("blocked_hours", 0)
+                hist_data.append(
+                    {
+                        "IP": r["ip_address"],
+                        "Grund": r["reason"],
+                        "Gesperrt": r["blocked_at"].strftime("%Y-%m-%d %H:%M") if r["blocked_at"] else "-",
+                        "Entsperrt": r["unblocked_at"].strftime("%Y-%m-%d %H:%M") if r["unblocked_at"] else "-",
+                        "Dauer (h)": f"{hours:.1f}" if hours else "-",
+                        "Typ": "👤 Manuell" if r["is_manual"] else "🤖 Auto",
+                    }
+                )
+
+            hist_df = pd.DataFrame(hist_data)
+            st.dataframe(hist_df, use_container_width=True, hide_index=True)
+
+            csv_hist = hist_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="📥 Historie als CSV exportieren",
+                data=csv_hist,
+                file_name=f"blocklist_history_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+            )
+        else:
+            st.info("Keine aufgehobenen Sperren vorhanden.")
+    except Exception as e:
+        st.error(f"Fehler beim Laden der Historie: {e}")
 
 
 def render_asn_blocking():

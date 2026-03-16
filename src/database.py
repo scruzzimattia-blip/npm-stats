@@ -749,6 +749,24 @@ def get_blocked_ips(active_only: bool = True) -> List[Tuple]:
             return cur.fetchall()
 
 
+def get_blocked_ips_history(limit: int = 100) -> List[Dict[str, Any]]:
+    """Get historical (unblocked) IPs from the database."""
+    query = """
+        SELECT
+            ip_address, reason, blocked_at, block_until, unblocked_at,
+            is_manual, is_permanent,
+            EXTRACT(EPOCH FROM (unblocked_at - blocked_at))/3600 as blocked_hours
+        FROM blocklist
+        WHERE unblocked_at IS NOT NULL
+        ORDER BY unblocked_at DESC
+        LIMIT %s;
+    """
+    with get_connection() as conn:
+        with conn.cursor(row_factory=psycopg_rows.dict_row) as cur:
+            cur.execute(query, (limit,))
+            return cur.fetchall()
+
+
 def get_blocklist_with_ai_status() -> List[Dict[str, Any]]:
     """Get the active blocklist with AI analysis status."""
     query = """
