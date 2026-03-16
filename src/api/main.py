@@ -26,6 +26,59 @@ async def root():
     return {"status": "online", "service": "NPM Monitor API", "version": "2.0.0"}
 
 
+@app.get("/health")
+async def health():
+    """Health check endpoint — verifies DB and Redis connectivity."""
+    status = {"status": "healthy", "database": "unknown", "redis": "unknown"}
+
+    # Check database
+    try:
+        from src.database import is_database_available
+
+        if is_database_available():
+            status["database"] = "connected"
+        else:
+            status["database"] = "unavailable"
+            status["status"] = "degraded"
+    except Exception as e:
+        status["database"] = f"error: {e}"
+        status["status"] = "degraded"
+
+    # Check Redis
+    try:
+        redis_client = get_redis()
+        redis_client.ping()
+        status["redis"] = "connected"
+    except Exception as e:
+        status["redis"] = f"error: {e}"
+        status["status"] = "degraded"
+
+    status_code = 200 if status["status"] == "healthy" else 503
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(content=status, status_code=status_code)
+
+
+@app.get("/version")
+async def version():
+    """Return version information."""
+    import tomllib
+    from pathlib import Path
+
+    version_info = {"version": "unknown", "name": "npm-monitor", "python_requires": ">=3.12"}
+
+    pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    if pyproject_path.exists():
+        with open(pyproject_path, "rb") as f:
+            data = tomllib.load(f)
+            project = data.get("project", {})
+            version_info["version"] = project.get("version", "unknown")
+            version_info["name"] = project.get("name", "npm-monitor")
+            version_info["python_requires"] = project.get("requires-python", ">=3.12")
+
+    return version_info
+
+
 @app.get("/stats", response_model=SystemStats)
 async def get_stats():
     """Get global system statistics."""

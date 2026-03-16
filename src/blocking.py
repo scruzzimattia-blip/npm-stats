@@ -143,70 +143,7 @@ class IPBlocker:
         self._refresh_lists_if_needed()
         return ip in self.whitelisted_ips
 
-    def _is_verified_bot(self, ip: str, user_agent: str) -> bool:
-        """Check if request is from a verified good bot (Google, Bing, etc.)."""
-        if not user_agent:
-            return False
 
-        ua_lower = user_agent.lower()
-
-        # Known good bot patterns
-        verified_bots = [
-            "googlebot",
-            "google-inspectiontool",
-            "googleother",
-            "bingbot",
-            "bingpreview",
-            "msnbot",
-            "yandexbot",
-            "yandex.com/bots",
-            "duckduckbot",
-            "baiduspider",
-            "facebookexternalhit",
-            "twitterbot",
-            "applebot",
-            "slackbot",
-            "telegrambot",
-            "discordbot",
-            "whatsapp",
-            "safari/537.36",  # iOS Safari (often misidentified)
-        ]
-
-        # Check if UA contains any known good bot
-        for bot in verified_bots:
-            if bot in ua_lower:
-                # For Google and Bing, verify with RDNS
-                if "google" in bot:
-                    return self._verify_google_bot(ip)
-                elif "bing" in bot or "msn" in bot:
-                    return self._verify_bing_bot(ip)
-                return True
-
-        return False
-
-    def _verify_google_bot(self, ip: str) -> bool:
-        """Verify Google bot via RDNS lookup."""
-        import socket
-
-        try:
-            hostname, _, _ = socket.gethostbyaddr(ip)
-            if hostname.endswith(".googlebot.com") or hostname.endswith(".google.com"):
-                return True
-        except Exception:
-            pass
-        return False
-
-    def _verify_bing_bot(self, ip: str) -> bool:
-        """Verify Bing bot via RDNS lookup."""
-        import socket
-
-        try:
-            hostname, _, _ = socket.gethostbyaddr(ip)
-            if hostname.endswith(".search.msn.com"):
-                return True
-        except Exception:
-            pass
-        return False
 
     def _block_ip(self, ip: str, reason: str, block_until: datetime):
         """Block an IP address."""
@@ -347,7 +284,17 @@ class IPBlocker:
             send_notification(ip, reason, block_until)
             return reason
 
-        # WAF: Pattern Check (Task 3: Modern threats)
+        # 1. Deceptive Defense: Honey-Paths (Custom/Long-term ban)
+        if self._is_honey_path(path):
+            reason = f"Honeypot ausgelöst: {path}"
+            # Long-term block for accessing critical bait paths
+            block_until = datetime.now(timezone.utc) + timedelta(seconds=app_config.honey_pot_duration)
+            self._block_ip(ip, reason, block_until)
+            logger.warning(f"HONEYPOT TRIGGERED for IP {ip}: {reason} (Path: {path})")
+            send_notification(ip, reason, block_until)
+            return reason
+
+        # 2. WAF: Pattern Check (Task 3: Modern threats)
         waf_reason = self._check_waf_rules(path, user_agent)
         if waf_reason:
             duration = self._get_adaptive_duration(ip)
@@ -356,16 +303,6 @@ class IPBlocker:
             logger.warning(f"INSTANT BLOCK (WAF) for IP {ip}: {waf_reason}")
             send_notification(ip, waf_reason, block_until)
             return waf_reason
-
-        # 1. Deceptive Defense: Honey-Paths (Custom/Long-term ban)
-        if self._is_honey_path(path):
-            reason = f"Honeypot ausgelöst: {path}"
-            # Long-term block for accessing critical bait paths
-            block_until = datetime.now(timezone.utc) + timedelta(seconds=app_config.honey_pot_duration)
-            self._block_ip(ip, reason, block_until)
-            logger.warning(f"DECEPTIVE DEFENSE: LONG-TERM BLOCK for IP {ip}: {reason}")
-            send_notification(ip, reason, block_until)
-            return reason
 
         # 2. Regular suspicious path check
         is_suspicious = self._is_suspicious_path(path)

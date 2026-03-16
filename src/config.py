@@ -264,6 +264,10 @@ def validate_config() -> list[str]:
     if db_config.port < 1 or db_config.port > 65535:
         errors.append(f"DB_PORT must be between 1 and 65535, got {db_config.port}")
 
+    # Redis validation
+    if app_config.redis_url and not app_config.redis_url.startswith(("redis://", "rediss://")):
+        errors.append(f"REDIS_URL must start with redis:// or rediss://, got '{app_config.redis_url}'")
+
     # Auth validation
     if app_config.enable_auth:
         if not app_config.auth_password:
@@ -292,6 +296,14 @@ def validate_config() -> list[str]:
             errors.append("CLOUDFLARE_API_TOKEN ist erforderlich, wenn Cloudflare aktiviert ist")
         if not app_config.cloudflare_zone_id:
             errors.append("CLOUDFLARE_ZONE_ID ist erforderlich, wenn Cloudflare aktiviert ist")
+
+    # SMTP validation
+    if app_config.smtp_host and not app_config.smtp_to:
+        errors.append("SMTP_TO is required when SMTP_HOST is set")
+
+    # Telegram validation
+    if bool(app_config.telegram_bot_token) != bool(app_config.telegram_chat_id):
+        errors.append("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must both be set or both be empty")
 
     return errors
 
