@@ -145,8 +145,8 @@ class IPBlocker:
 
 
 
-    def _block_ip(self, ip: str, reason: str, block_until: datetime):
-        """Block an IP address."""
+    def block_ip(self, ip: str, reason: str, block_until: datetime):
+        """Public method to block an IP address across all enabled layers."""
         # 3. Dry-Run Check
         if app_config.waf_dry_run:
             logger.info(f"[DRY-RUN] Would block IP {ip} until {block_until}. Reason: {reason}")
@@ -185,6 +185,10 @@ class IPBlocker:
             reset_request_counters(ip)
         except Exception as e:
             logger.error(f"Failed to reset request counters in DB: {e}")
+
+    def _block_ip(self, ip: str, reason: str, block_until: datetime):
+        """Internal alias for block_ip to maintain backward compatibility with internal calls."""
+        self.block_ip(ip, reason, block_until)
 
     def _get_adaptive_duration(self, ip: str) -> int:
         """Calculate adaptive block duration based on previous blocks."""

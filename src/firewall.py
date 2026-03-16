@@ -125,17 +125,48 @@ class IptablesManager:
             return False
 
     def unblock_ip(self, ip: str) -> bool:
-        """Remove iptables block for an IP address."""
+        """Remove all iptables block rules for an IP address in our chain using line numbers."""
         if not self.has_permissions and not self.use_sudo:
             return False
 
         try:
-            # Delete all rules for this IP in our chain
-            self._run_iptables(["-D", self.CHAIN_NAME, "-s", ip, "-j", "DROP"])
-            logger.info(f"Unblocked IP {ip} at firewall level")
+            # We use line numbers to delete because matching rules with comments via -D 
+            # can be very brittle if the comment isn't exactly the same.
+            
+            deleted_any = False
+            while True:
+                # 1. Find the line numbers for this IP in our chain
+                result = self._run_iptables(["-L", self.CHAIN_NAME, "-n", "--line-numbers"])
+                if result.returncode != 0:
+                    break
+                
+                # Look for the line number. We parse the output of iptables -L -n --line-numbers
+                # Example line: "1    DROP       0    --  1.2.3.4              0.0.0.0/0"
+                line_to_delete = None
+                for line in result.stdout.splitlines():
+                    if ip in line and "DROP" in line:
+                        parts = line.split()
+                        if len(parts) > 0 and parts[0].isdigit():
+                            line_to_delete = parts[0]
+                            break
+                
+                if not line_to_delete:
+                    break
+                
+                # 2. Delete the rule by line number
+                del_result = self._run_iptables(["-D", self.CHAIN_NAME, line_to_delete])
+                if del_result.returncode == 0:
+                    deleted_any = True
+                else:
+                    # If we can't delete by number for some reason, stop to avoid infinite loop
+                    logger.error(f"Failed to delete iptables rule line {line_to_delete} for {ip}")
+                    break
+            
+            if deleted_any:
+                logger.info(f"Unblocked IP {ip} at firewall level (removed all instances)")
             return True
 
-        except subprocess.SubprocessError as e:
+        except Exception as e:
             logger.error(f"Failed to unblock IP {ip}: {e}")
             return False
 
