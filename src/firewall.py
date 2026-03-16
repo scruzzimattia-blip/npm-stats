@@ -115,23 +115,19 @@ class IptablesManager:
             return False
 
     def unblock_ip(self, ip: str) -> bool:
-        """Remove all iptables block rules for an IP address in our chain using line numbers."""
+        """Remove all iptables block rules for an IP address in our chain and parent chain."""
         if not self.has_permissions and not self.use_sudo:
             return False
 
-        try:
-            # We use line numbers to delete because matching rules with comments via -D
-            # can be very brittle if the comment isn't exactly the same.
+        deleted_any = False
 
-            deleted_any = False
+        # 1. Remove from our custom chain
+        try:
             while True:
-                # 1. Find the line numbers for this IP in our chain
                 result = self._run_iptables(["-L", self.CHAIN_NAME, "-n", "--line-numbers"])
                 if result.returncode != 0:
                     break
 
-                # Look for the line number. We parse the output of iptables -L -n --line-numbers
-                # Example line: "1    DROP       0    --  1.2.3.4              0.0.0.0/0"
                 line_to_delete = None
                 for line in result.stdout.splitlines():
                     if ip in line and "DROP" in line:
@@ -143,22 +139,45 @@ class IptablesManager:
                 if not line_to_delete:
                     break
 
-                # 2. Delete the rule by line number
                 del_result = self._run_iptables(["-D", self.CHAIN_NAME, line_to_delete])
                 if del_result.returncode == 0:
                     deleted_any = True
                 else:
-                    # If we can't delete by number for some reason, stop to avoid infinite loop
-                    logger.error(f"Failed to delete iptables rule line {line_to_delete} for {ip}")
                     break
-
-            if deleted_any:
-                logger.info(f"Unblocked IP {ip} at firewall level (removed all instances)")
-            return True
-
         except Exception as e:
-            logger.error(f"Failed to unblock IP {ip}: {e}")
-            return False
+            logger.error(f"Failed to unblock IP {ip} from NPM_MONITOR: {e}")
+
+        # 2. Also remove direct rules from parent chain (DOCKER-USER or INPUT)
+        parent_chain = getattr(self, "parent_chain", None)
+        if parent_chain:
+            try:
+                while True:
+                    result = self._run_iptables(["-L", parent_chain, "-n", "--line-numbers"])
+                    if result.returncode != 0:
+                        break
+
+                    line_to_delete = None
+                    for line in result.stdout.splitlines():
+                        if ip in line and "DROP" in line and "npm-monitor" in line.lower():
+                            parts = line.split()
+                            if len(parts) > 0 and parts[0].isdigit():
+                                line_to_delete = parts[0]
+                                break
+
+                    if not line_to_delete:
+                        break
+
+                    del_result = self._run_iptables(["-D", parent_chain, line_to_delete])
+                    if del_result.returncode == 0:
+                        deleted_any = True
+                    else:
+                        break
+            except Exception as e:
+                logger.error(f"Failed to unblock IP {ip} from {parent_chain}: {e}")
+
+        if deleted_any:
+            logger.info(f"Unblocked IP {ip} at firewall level")
+        return True
 
     def is_blocked(self, ip: str) -> bool:
         """Check if an IP is blocked in iptables."""
