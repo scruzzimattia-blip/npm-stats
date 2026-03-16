@@ -38,7 +38,7 @@ def render_blocked_ips():
     """Render the enhanced blocked IPs management interface."""
     st.subheader("🚫 Aktive Sperrliste")
 
-    blocker = get_blocker()
+    blocker = get_blocker(use_firewall=app_config.use_firewall)
 
     # 1. Action Buttons & Quick Controls
     col_actions1, col_actions2 = st.columns([2, 1])
