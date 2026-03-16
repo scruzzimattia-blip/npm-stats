@@ -1014,12 +1014,12 @@ def get_protocol_distribution(
 
     query = f"""
         SELECT
-            COALESCE(protocol, 'unknown') as protocol,
+            COALESCE(scheme, 'unknown') as protocol,
             COUNT(*) as request_count,
             SUM(response_length) as total_bytes
         FROM traffic
         {where_clause}
-        GROUP BY protocol
+        GROUP BY scheme
         ORDER BY request_count DESC;
     """
     with get_connection() as conn:
