@@ -143,8 +143,6 @@ class IPBlocker:
         self._refresh_lists_if_needed()
         return ip in self.whitelisted_ips
 
-
-
     def block_ip(self, ip: str, reason: str, block_until: datetime):
         """Public method to block an IP address across all enabled layers."""
         # 3. Dry-Run Check
@@ -809,6 +807,6 @@ _blocker: Optional[IPBlocker] = None
 def get_blocker(use_firewall: bool = False) -> IPBlocker:
     """Get or create the global blocker instance."""
     global _blocker
-    if _blocker is None:
+    if _blocker is None or _blocker.use_firewall != use_firewall:
         _blocker = IPBlocker(use_firewall=use_firewall)
     return _blocker
