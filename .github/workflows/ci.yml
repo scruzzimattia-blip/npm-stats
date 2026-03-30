@@ -18,22 +18,28 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip'
 
-      - name: Install uv and sync
+      - name: Install uv
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
-          source $HOME/.cargo/env
-          uv sync --frozen
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Set up uv cache
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('**/uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Install dependencies
+        run: uv sync --frozen
 
       - name: Run linting
-        run: |
-          source $HOME/.cargo/env
-          uv run ruff check src/
+        run: uv run ruff check src/
 
       - name: Run tests
         run: |
-          source $HOME/.cargo/env
           # Note: skipping DB tests in CI if no local postgres is available
           # but we keep the structure for future use
           uv run pytest tests/ -v
