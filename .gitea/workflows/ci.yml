@@ -10,20 +10,23 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    container:
-      image: python:3.12-slim
     env:
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
-      UV_CACHE_DIR: /root/.cache/uv
+      UV_CACHE_DIR: ${{ github.workspace }}/.cache/uv
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install OS dependencies
         run: |
-          apt-get update
-          apt-get install -y --no-install-recommends curl ca-certificates
-          rm -rf /var/lib/apt/lists/*
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends curl ca-certificates
+          sudo rm -rf /var/lib/apt/lists/*
 
       - name: Install uv
         run: |
@@ -33,7 +36,7 @@ jobs:
       - name: Set up uv cache
         uses: actions/cache@v4
         with:
-          path: /root/.cache/uv
+          path: .cache/uv
           key: ${{ runner.os }}-uv-${{ hashFiles('**/uv.lock') }}
           restore-keys: |
             ${{ runner.os }}-uv-
